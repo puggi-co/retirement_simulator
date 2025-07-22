@@ -1,0 +1,38 @@
+# 🔧 Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*.so
+
+# 📁 Virtual Environments
+.venv/
+.env/
+
+# 🔬 Jupyter Notebooks (if any remnants)
+*.ipynb
+.ipynb_checkpoints/
+
+# 💼 VS Code Metadata
+.vscode/
+
+# 📚 Documentation Artifacts
+docs/**/*.pdf
+docs/**/*.html
+
+# 🧪 Test Reports & Coverage
+*.log
+coverage/
+htmlcov/
+
+# 🔄 System Files
+*.DS_Store
+Thumbs.db
+
+# 🛠️ Build Artifacts
+build/
+dist/
+*.egg-info/
+
+# 🔐 Credentials or Tokens
+*.pem
+*.key
+secrets.yaml
