@@ -13,14 +13,15 @@ This simulator helps answer critical retirement planning questions:
 
 ## Features
 
-- **Tax-Smart Withdrawal Strategies**: Optimize withdrawal sequencing across account types
-- **Multiple Account Support**: Taxable, Tax-Deferred (Traditional IRA/401k), Tax-Free (Roth IRA)
-- **Advanced Strategies**: Fixed rate, target amount, guardrails, Roth conversion ladders
-- **Tax Optimization**: Stay within tax brackets, harvest losses, manage capital gains
-- **RMD Management**: Automatic handling of Required Minimum Distributions
-- **Monte Carlo Simulations**: Test portfolio performance across thousands of market scenarios
+- **Support Multiple Financial Accounts**: Taxable, Tax-Deferred (Traditional IRA/401k/TSP), Tax-Free (Roth IRA)
+- **Support Multiple Income Sources**: Social Security, Annuity(FERS)
+- **Withdrawal Workstream**: Strategies to optimize withdrawal sequencing across account types
+- **Monte Carlo Workstream**: Test portfolio performance across thousands of market scenarios
+- **Simulations**: Fixed rate, target amount, guardrails, Roth conversion ladders for each workstream
+- **RMD Management**: Automatic handling of Required Minimum Distributions based life expectancy tables
 - **Guardrail Adjustments**: Dynamic withdrawal adjustments based on portfolio performance
-- **Comprehensive Tax Modeling**: Ordinary income, capital gains, qualified dividends, AMT
+- **Tax Optimization**: Stay within tax brackets, harvest losses, manage capital gains
+- **Tax Modeling**: Ordinary income, capital gains, qualified dividends, AMT, standard deduction
 - **Dashboard Integration**: Results staged for downstream visualization tools
 - **Flexible Configuration**: Easily adjust assumptions, time horizons, and tax parameters
 
@@ -80,17 +81,47 @@ print(f"Roth conversion success rate: {roth_results.success_rate}%")
 ## Project Structure
 
 ```
-retirement-simulator/
-├── README.md                    # This file
-├── config_context.py           # Configuration and context classes
-├── adjustments.py              # Financial adjustment utilities (inflation, etc.)
-├── ledger.py                   # Account ledger and transaction tracking
-├── runner.py                   # Main simulation runner
-├── workbook_interface.py       # Excel/CSV data loading
-├── strategy_withdrawals.py     # Withdrawal strategy implementations
-├── strategy_montecarlo.py      # Monte Carlo simulation engine
-└── tax_models.py              # Tax calculation models
+retirement_simulator/
+├─ simulation/               # Configs, contexts, schedule logic
+├─ core/                     # Adjustments, tax logic, ledger flow
+├─ strategies/               # Scenario + Monte Carlo logic grouped by mode
+│   ├─ withdrawal_rate/
+│   ├─ withdrawal_amount/
+│   ├─ withdrawal_guardrail/
+│   └─ roth_conversion/
+├─ runner/                   # Simulation orchestration
+├─ inputs/                   # Scenario inputs and reference data
+│   ├─ retirement_snapshot/
+│   └─ reference/
+├─ outputs/                  # Grouped by modality (exports, logs, visualizations)
+├─ docs/                     # Markdown documentation and diagrams
+├─ tests/                    # Unit tests
+├─ .gitignore
+├─ README.md
+└─ CHANGELOG.md
+
 ```
+
+## 📁 File Mapping Reference
+```
+
+| Legacy File                 | New Location                                             | Purpose                               |
+|----------------------------|----------------------------------------------------------|----------------------------------------|
+| `config_context.py`        | `simulation/config.py`                                   | Core configuration class              |
+| `ConfigMonteCarlo.py`      | `simulation/context.py`                                  | Monte Carlo context setup             |
+| `ledger.py`                | `core/ledger/ledger.py`                                  | Account and transaction tracking      |
+| `runner.py`                | `runner/runner.py`                                       | Simulation orchestration              |
+| `sim_withdrawal.py`        | `strategies/withdrawal_amount/scenario.py`               | Tax-smart withdrawal logic            |
+| `sim_montecarlo.py`        | `strategies/withdrawal_amount/montecarlo.py`             | Monte Carlo analysis for withdrawal   |
+| `adjustments.py`           | `core/adjustments/adjustments.py`                        | Inflation and COLA adjustments        |
+| `retirement_snapshot.json` | `inputs/retirement_snapshot/retirement_snapshot.json`    | Main scenario config input            |
+| `retirement_snapshot.xlsx` | `inputs/retirement_snapshot/retirement_snapshot.xlsx`    | Spreadsheet-based input               |
+| `federal_tax_brackets.csv` | `inputs/reference/federal_tax_brackets.csv`              | IRS tax table reference               |
+| `runner.md`                | `docs/runner.md`                                         | Orchestration documentation           |
+| `sim_withdrawal.md`        | `docs/strategy_withdrawals.md`                           | Strategy documentation                |
+| `retirement_blueprint.md`  | `docs/retirement_blueprint.md`                           | Planning philosophy overview          |
+```
+
 
 ## Core Components
 

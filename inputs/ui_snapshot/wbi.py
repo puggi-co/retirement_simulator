@@ -186,4 +186,3 @@ class WorkbookInterface:
             end_age=schedule_dict['end_age'],
             end_year=schedule_dict['end_year']
         )
-    

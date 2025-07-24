@@ -1,38 +1,53 @@
-# 🔧 Python Bytecode & Cache
+# 🔧 Python Bytecode & C Extensions
 __pycache__/
 *.py[cod]
 *.so
 
-# 📁 Virtual Environments
-.venv/
-.env/
-
-# 🔬 Jupyter Notebooks (if any remnants)
+# 🧪 Jupyter Notebooks & Auto Checkpoints
 *.ipynb
 .ipynb_checkpoints/
 
-# 💼 VS Code Metadata
+# 🧬 Virtual Environments
+.venv/
+.env/
+
+# 🖥️ VS Code Workspace Settings (Preserve Key Files)
 .vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/extensions.json
 
-# 📚 Documentation Artifacts
-docs/**/*.pdf
+# 📖 Docs Build Artifacts (Preserve Markdown)
 docs/**/*.html
+docs/**/*.pdf
+docs/build/
 
-# 🧪 Test Reports & Coverage
+# 📁 Modular Repo Artifacts
+src/__pycache__/
+tests/__pycache__/
+schemas/__pycache__/
+
+# 🧠 AI Collaboration Metadata
+ai-journal/
+*.interactionlog
+*.promptset
+docs/context/journal/
+
+# 🔬 Test Coverage & Logs
 *.log
 coverage/
 htmlcov/
 
-# 🔄 System Files
-*.DS_Store
-Thumbs.db
-
-# 🛠️ Build Artifacts
+# 🛠️ Build Output
 build/
 dist/
 *.egg-info/
 
-# 🔐 Credentials or Tokens
-*.pem
+# 🔐 Secrets & Credentials
 *.key
+*.pem
 secrets.yaml
+
+# 🗂️ OS-Specific Clutter
+.DS_Store
+Thumbs.db
