@@ -1,0 +1,37 @@
+Parking Lot Item: Design a Docstring Style for Indexing + Discovery
+Goal: Align file-level headers and inline docstring formats with future documentation tooling (e.g., automated indexing, module discovery, cross-referencing).
+
+Motivation:
+
+Improve compatibility with tools like Sphinx, MkDocs, or custom doc parsers.
+
+Enable intuitive browsing of modules, classes, and functions without manually curating.
+
+Establish consistent authoring for both technical clarity and UX readability.
+
+Suggested Approach:
+
+Define a standard template for:
+
+Module-level headers ("""Module: Simulation Engine...""")
+
+Function/class docstrings (Args, Returns, Raises, Example)
+
+Optional tags (@deprecated, @experimental, @workstream:) for indexing
+
+Add examples to /docs/templates/docstring_style.md
+
+Auto-check via linting (e.g., pydocstyle, or custom rules via flake8-docstrings)
+
+Status: Reinstated from earlier discussion, awaiting prioritization.
+
+Next Trigger: Once primary modules are converted to .py, review style alignment during cleanup pass.
+
+im's Retirement Simulator Parking Lot
+Item	Description	Status
+1. Design Streamlit Frontend GUI	Replace Excel-based interface with a user-friendly, interactive dashboard for inputs and results. Includes sidebar widgets and visual simulation output.	📍 Newly added
+2. Implement validate_tax_sheet() Utility	Optional function in tax_models.py to check for required columns in incoming DataFrames and log missing fields. Great for ingestion integrity.	🕓 On hold until WBI stabilizes
+3. Prototype Dynamic Loader with Dispatch Hooks	Replace hardcoded ingestion logic in tax_loader.py with a scalable dispatch system that routes each tab to its matching .from_df() constructor.	💡 Suggested
+4. Integrate WorkbookInterface with tax_models accessors	In wbi.py, hook in load_all_tax_tabs() and register_tax_accessors() to centralize tax sheet handling and decouple access logic.	🔄 Work in progress
+5. Consolidate Excel usage into single ingestion layer	Ensure all Excel references are routed through one module, so the frontend swap to Streamlit won’t ripple through computation code.	⛏️ Being approached organically
+6. Transition Excel out of simulation pipeline	Final retirement of Excel as input/output medium once Streamlit is fully functioning. Will reduce technical debt and dependency surface.	🛣️ Future goal

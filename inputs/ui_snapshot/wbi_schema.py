@@ -1,6 +1,6 @@
 WORKBOOK_TABS = [
     'My_Accounts', 'My_Income', 'My_Config',
-    'T_AMT', 'T_CapitalGain', 'T_TaxBrackets', 'T_StandardDeduction', 'T_LEF'
+    'T_AMT', 'T_CapitalGain', 'T_TaxBracket', 'T_StandardDeduction', 'T_LEF'
 ]
 
 REQUIRED_COLUMNS = {
@@ -9,7 +9,7 @@ REQUIRED_COLUMNS = {
     'My_Config': {'parameter', 'value', 'scenario_default', 'montecarlo_default', 'comment'},
     'T_AMT': {'year', 'tax_type', 'low_single', 'high_single', 'low_married', 'high_married'},
     'T_CapitalGain': {'year', 'tax_type', 'tax_rate', 'single', 'married', 'head'},
-    'T_TaxBrackets': {'year', 'tax_type', 'tax_rate', 'low_single', 'high_single', 'low_married', 'high_married', 'low_head', 'high_head'},
+    'T_TaxBracket': {'year', 'tax_type', 'tax_rate', 'low_single', 'high_single', 'low_married', 'high_married', 'low_head', 'high_head'},
     'T_StandardDeduction': {'year', 'tax_type', 'single', 'married', 'head'},
     'T_LEF': {'age', 'lef_2001', 'uniform_2001', 'lef_2002_2020', 'uniform_2002_2020', 'lef_2021_present', 'uniform_2021_present'},
     'my_scenarios': {'scenario_id', 'montecarlo_id', 'scenario_name', 'withdrawal_mode', 'scenario_description', 'include_dashboard'}

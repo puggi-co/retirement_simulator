@@ -1,4 +1,10 @@
 # ── Workbook Interface ──────────────────────────
+import pandas as pd
+from simulation.tax.model import TAX_TABS, TAX_REQUIRED_COLUMNS, register_tax_accessors, load_all_tax_tabs
+from simulation.schedule import SimulationSchedule
+from simulation.config import SimulationConfig
+from pathlib import Path
+
 class WorkbookInterface:
     """Loads user input via Excel and exposes structured DataFrames."""
 
@@ -16,12 +22,12 @@ class WorkbookInterface:
         self.df_amt = None
         self.df_capital_gain = None
         self.df_standard_deduction = None
-        self.df_tax_brackets = None
-        self.df_lef_factors = None
+        self.df_tax_bracket = None
+        self.df_lef_factor = None
 
         # ── Accessor Registry ────────────────────────
         self._registry = {
-            'porfolio': lambda: self.df_my_portfolio,
+            'portfolio': lambda: self.df_my_portfolio,
             'scenario': lambda: self.df_scenario,
             'schedule': lambda: self.sim_schedule,
             'config': lambda: self.config,
@@ -29,7 +35,7 @@ class WorkbookInterface:
             'montecarlo_config': lambda: self.montecarlo_config,
             'amt': lambda: self.df_amt,
             'capital_gain': lambda: self.df_capital_gain,
-            'lef': lambda: self.df_lef,
+            'lef': lambda: self.df_lef_factor,
             'standard_deduction': lambda: self.df_standard_deduction,
             'tax_bracket': lambda: self.df_tax_bracket
         }
@@ -44,27 +50,9 @@ class WorkbookInterface:
         """Reads Excel sheets and builds structured DataFrames."""
         try:
             for tab in self.tabs:
-                
-                raw_df = pd.read_excel(self.workbook, sheet_name=tab)
-                cleaned_df = self.clean_sheet(raw_df, REQUIRED_COLUMNS.get(tab), sheet_name=tab)
-                
-                if tab == 'My_Accounts':
-                    self.df_my_account = cleaned_df
-                elif tab == 'My_Income':
-                    df_my_income = cleaned_df
-                elif tab == 'My_Config':
-                    df_config = cleaned_df
-                elif tab == 'T_AMT':
-                    self.df_amt = cleaned_df
-                elif tab == 'T_CapitalGain':
-                    self.df_capital_gain = cleaned_df
-                elif tab == 'T_TaxBrackets':
-                    self.df_tax_bracket = cleaned_df
-                elif tab == 'T_StandardDeduction':
-                    self.df_standard_deduction = cleaned_df
-                elif tab == 'T_LEF':
-                    self.df_lef = cleaned_df
-                    
+                raw_dfs = {tab: pd.read_excel(self.workbook, sheet_name=tab) for tab in TAX_TABS}
+                tax_tables = load_all_tax_tabs(raw_dfs)
+                self._registry.update(register_tax_accessors(tax_tables))
 
         except Exception as e:
             raise RuntimeError(f'❌ Error loading workbook: {e}')

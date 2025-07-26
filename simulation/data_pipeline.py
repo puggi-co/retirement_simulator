@@ -61,6 +61,114 @@ def merge_income_sources(df_my_account, df_my_income):
     my_account_df[['owner_age', 'rmd_begin_year']] = 0
     
     for adx, account in my_account_df.iterrows():
+        owner_birth_date = datetime.strptime(account['owner_birthdate_iso'], '%Y-%m-%d').date()
+        owner_birth_year = owner_birth_date.year
+        owner_age = calculate_age(owner_birth_year, account['begin_year'])
+
+        rmd_info = calculate_rmd_fields(account)
+
+        my_account_df.loc[adx, 'owner_birth_date'] = owner_birth_date
+        my_account_df.loc[adx, 'owner_age'] = owner_age
+        my_account_df.loc[adx, 'rmd_table'] = rmd_info['rmd_table']
+        my_account_df.loc[adx, 'rmd_age'] = rmd_info['rmd_age']
+        my_account_df.loc[adx, 'rmd_begin_year'] = rmd_info['rmd_begin_year']
+
+     # Return portfolio dataframe with columns in the preferred order
+    df_my_portfolio = my_account_df[[
+        'account_name', 'account_type', 'account_tax_type', 'begin_year', 'begin_balance', 
+        'owner_birth_date', 'owner_age', 'filing_status', 'prior_owner_death_year', 'beneficiary_birth_year', 
+        'rmd_begin_year', 'rmd_age', 'rmd_table'
+    ]]
+    
+    return df_my_portfolio
+
+def calculate_rmd_fields(account: pd.Series) -> dict:
+    account_type = account['account_type']
+
+    if account_type == 'ira_inherited':
+        return handle_inherited_ira(account)
+    elif account_type in ('ira', 'tsp'):
+        return handle_standard_ira(account)
+    elif account_type == 'brokerage':
+        return handle_brokerage(account)
+    elif account_type in ('fers_income', 'ordinary_income', 'ssa_income'):
+        return handle_income_stream(account)
+    else:
+        return handle_unknown(account)
+
+def handle_inherited_ira(account: pd.Series) -> dict:
+    begin_year = account['begin_year']
+    owner_birth_year = datetime.strptime(account['owner_birthdate_iso'], '%Y-%m-%d').year
+    prior_owner_birth_year = datetime.strptime(account['prior_owner_birthdate_iso'], '%Y-%m-%d').year
+    prior_owner_death_year = account['prior_owner_death_year']
+    beneficiary_birth_year = account['beneficiary_birth_year']
+
+    rmd_age, rmd_begin_year = get_rmd_age(datetime(prior_owner_birth_year, 1, 1))
+
+    if rmd_begin_year < prior_owner_death_year:
+        rmd_age = prior_owner_death_year - owner_birth_year
+        if prior_owner_death_year >= 2021:
+            rmd_table = 'lef_2021_present'
+        elif prior_owner_death_year <= 2001:
+            rmd_table = 'lef_2001'
+        else:
+            rmd_table = 'lef_2002_2020'
+    else:
+        rmd_age = begin_year - beneficiary_birth_year
+        rmd_table = 'uniform_2021_present'
+
+    return {
+        'rmd_age': rmd_age,
+        'rmd_begin_year': rmd_begin_year,
+        'rmd_table': rmd_table
+    }
+
+def handle_standard_ira(account: pd.Series) -> dict:
+    """Handle standard IRA or TSP accounts."""
+    owner_birth_date = datetime.strptime(account['owner_birthdate_iso'], '%Y-%m-%d').date()
+    rmd_age, rmd_begin_year = get_rmd_age(owner_birth_date)
+
+    return {
+        'rmd_age': rmd_age,
+        'rmd_begin_year': rmd_begin_year,
+        'rmd_table': 'uniform_2021_present'
+    }
+
+def handle_brokerage(account: pd.Series) -> dict:
+    # These accounts are not subject to RMD but may be depleted using LEF estimates
+    return {
+        'rmd_age': 0,
+        'rmd_begin_year': 0,
+        'rmd_table': 'lef_2021_present'
+    }
+
+def handle_income_stream(account: pd.Series) -> dict:
+    """Handle income streams like FERS, ordinary income, or SSA."""
+    begin_year = account['begin_year']
+    owner_birth_date = datetime.strptime(account['owner_birthdate_iso'], '%Y-%m-%d').date()
+    owner_birth_year = owner_birth_date.year
+
+    rmd_age = account.get('rmd_age', 0)
+    rmd_begin_year = begin_year - owner_birth_year
+
+    return {
+        'rmd_age': rmd_age,
+        'rmd_begin_year': rmd_begin_year,
+        'rmd_table': ''
+    }
+
+def handle_unknown(account: pd.Series) -> dict:
+    """Handle unknown account types."""
+    print(f"Warning: Account type not yet supported: {account['account_type']}")
+    return {
+        'rmd_age': 0,
+        'rmd_begin_year': 0,
+        'rmd_table': 'uniform_2021_present'
+    }
+
+def dummy2():
+    """ Delete once new code is working"""
+    for adx, account in my_account_df.iterrows():
         # Fetch existing account details
         account_name = account['account_name']
         account_type = account['account_type']
@@ -114,28 +222,4 @@ def merge_income_sources(df_my_account, df_my_income):
         else:
             rmd_table = 'uniform_2021_present' # Default to use the latest Uniform Life table
             print('Warning: Account type is not yet supported.', account_type)
-
-        # Add derived columns for RMDs and optional withdraws
-        my_account_df.loc[adx, 'owner_birth_date'] = owner_birth_date
-        my_account_df.loc[adx, 'owner_age'] = owner_age
-        my_account_df.loc[adx, 'rmd_table'] = rmd_table
-        my_account_df.loc[adx, 'rmd_age'] = rmd_age
-        my_account_df.loc[adx, 'rmd_begin_year'] = rmd_begin_year
-
-    # Return portfolio dataframe with columns in the preferred order
-    df_my_portfolio = my_account_df[[
-        'account_name', 'account_type', 'account_tax_type', 'begin_year', 'begin_balance', 
-        'owner_birth_date', 'owner_age', 'filing_status', 'prior_owner_death_year', 'beneficiary_birth_year', 
-        'rmd_begin_year', 'rmd_age', 'rmd_table'
-    ]]
-    
-    return df_my_portfolio
-
-def build_schedule(schedule_dict) -> SimulationSchedule:
-    return SimulationSchedule(
-        begin_age=schedule_dict['begin_age'],
-        begin_year=schedule_dict['begin_year'],
-        duration=schedule_dict['duration'],
-        end_age=schedule_dict['end_age'],
-        end_year=schedule_dict['end_year']
-    )
+    return
