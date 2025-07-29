@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retirement_simulator"
+version = "0.1.0"
+description = "A modular retirement simulation engine with human-AI collaboration protocols"
+authors = [{ name = "Jim", email = "your.email@example.com" }]
+readme = "docs/README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.22",
+    "pandas>=1.4",
+    "streamlit>=1.30",  # Optional, GUI layer
+    "openpyxl",         # For Excel adapter
+]
+
+[project.optional-dependencies]
+gui = ["streamlit"]
+excel = ["openpyxl"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"core" = ["py.typed"]
+
+[project.scripts]
+simulate = "core.runner:main"  # CLI entry point to orchestration engine

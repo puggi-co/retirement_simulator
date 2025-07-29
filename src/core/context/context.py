@@ -79,8 +79,10 @@ class FinancialAdjustmentMixin:
     def adjust_for_real_spend(self, value: float, years: int) -> float:
         return value / ((1 + self.config.inflation_rate) ** years)
 
+from simulation.ledger_writer import LedgerWriterMixin
 @dataclass
-class WithdrawalContext(SimulationContext, FinancialAdjustmentMixin):
+class WithdrawalContext(SimulationContext, FinancialAdjustmentMixin, LedgerWriterMixin):
+
     def apply_guardrails(self, rate: float) -> float:
         return self.config.withdrawal.apply_guardrails(rate)
 

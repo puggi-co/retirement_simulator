@@ -21,3 +21,11 @@ class SimulationSchedule:
             end_age=d['end_age'],
             end_year=d['end_year']
         )
+    def year(self, ydx: int) -> int:
+        """Returns the calendar year corresponding to a simulation index."""
+        return self.start_year + ydx
+
+    def age(self, ydx: int) -> int:
+        """Returns the retiree's age for a given simulation index."""
+        return self.start_age + ydx
+    

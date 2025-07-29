@@ -32,6 +32,14 @@ class WithdrawalConfig:
     def apply_guardrails(self, rate: float) -> float:
         """Clamp the withdrawal rate within guardrail limits."""
         return max(self.guardrail_floor, min(rate, self.guardrail_ceiling))
+    
+    def goal_for_year(self, ydx: int, rate: Optional[float] = None) -> float:
+        """Returns the inflation-adjusted and guardrail-bounded withdrawal goal 
+        for a given simulation year."""
+        r = rate if rate is not None else self.assumed_inflation_rate
+        inflated = self.withdrawal_amount * ((1 + r) ** ydx)
+        return self.apply_guardrails(inflated)
+
 
 @dataclass
 class SimulationConfig:

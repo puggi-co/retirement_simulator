@@ -11,8 +11,7 @@ def simulate_scenario_withdrawals(
     # Unpack withdrawal context
     config = context.config
     adjust_for_inflation = context.use_inflation()
-    withdrawal_goal = context.apply_guardrails(withdrawal_goal)
-
+ 
 #    account_closure_amount = config.account_closure_amount
     ssa_tax_rate = config.ssa_tax_rate
     config_withdrawal = config.withdrawal_amount
@@ -26,7 +25,7 @@ def simulate_scenario_withdrawals(
     df_lef       = tax_tables.lef
 
     # Unpack withdrawal config
-    withdrawal_cfg = context.config.withdrawal
+    withdrawal_goal = context.config.withdrawal.goal_for_year(ydx)
     assumed_gain_rate = withdrawal_cfg.assumed_gain_rate
     withdrawal_rate = withdrawal_cfg.withdrawal_rate
     guardrail_floor = withdrawal_cfg.guardrail_floor
@@ -44,15 +43,15 @@ def simulate_scenario_withdrawals(
     all_withdrawals = []
     
     for ydx in range(config_years):
-        year = schedule.begin_year + ydx
-        age = schedule.begin_age + ydx
+        year = schedule.year(ydx)
+        age = schedule.age(ydx)
         withdrawals_this_year = []
 
-        target_withdrawal = config_withdrawal
-        withdrawal_goal = (
-            target_withdrawal * ((1 + inflation_rate) ** ydx)
-            if adjust_for_inflation else target_withdrawal
+        withdrawal_goal = context.apply_guardrails(
+            context.adjust_for_inflation(context.config.withdrawal.withdrawal_amount, ydx)
         )
+        inflation_adjusted = context.adjust_for_inflation(withdrawal_goal, ydx)
+
 
         # Set year snapshot starting balances
         income_total = 0.0
@@ -95,32 +94,15 @@ def simulate_scenario_withdrawals(
                     taxable_income = ord_inc
 
                 # Write annotated income to ledger
-                ledger.add_year(
+                context.record_income_to_ledger(
+                    ledger=ledger,
+                    account=account,
                     year=year,
                     age=age,
-                    return_rate=growth_factor,
-                    withdrawal_mode=account['account_type'],
-                    account_name=account['account_name'],
-                    account_type=account['account_type'],
-                    account_tax_type=account['account_tax_type'],
-                    filing_status=account['filing_status'],
-                    begin_balance=account['begin_balance'],
-                    current_balance=round(current_balance, 2),
-                    end_balance=round(end_balance, 2),
-                    withdraw_amount=round(current_balance, 2),
-                    omd=0.0,
-                    rmd=0.0,
-                    ord_inc=round(ord_inc, 2),
-                    ssa_inc=round(ssa_inc, 2),
-                    roth_convert_amount=0.0,
-                    taxable_income=round(taxable_income, 2), # total ordinary income
-                    taxable_gain=0.0,
-                    taxable_ssa=round(taxable_ssa, 2),
-                    tax_owed=0.0,
-                    effective_tax_rate=0.0,
-                    rmd_begin_year=account.get('rmd_begin_year', 0),
-                    rmd_age=rmd_age,
-                    rmd_table=account['rmd_table']
+                    growth_rate=growth_factor,
+                    current_balance=current_balance,
+                    taxable_income=taxable_income,
+                    taxable_ssa=taxable_ssa
                 )
 
                 if account_type in ['ordinary_income', 'fers_income']:
