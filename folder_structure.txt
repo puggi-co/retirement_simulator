@@ -1,0 +1,103 @@
+Folder PATH listing for volume Windows
+Volume serial number is 4A85-D095
+C:.
+ª   .env
+ª   .gitignore
+ª   .prettierrc
+ª   cspell.json
+ª   folder_structure.txt
+ª   pyproject.toml
+ª   retirement_simulator.code-workspace
+ª   
++---.vscode
+ª       extensions.json
+ª       launch.json
+ª       README.md
+ª       settings.json
+ª       tasks.json
+ª       
++---doc
+ª       config.md
+ª       config_context.md
+ª       context.md
+ª       CONTRIBUTORS.md
+ª       ledger.md
+ª       Parking Lot Concepts.txt
+ª       retirement_blueprint.md
+ª       runner.md
+ª       sim_montecarlo.md
+ª       sim_withdrawal.md
+ª       technical_crib_sheet.md
+ª       wbi.md
+ª       
++---methodology
+ª       ai_collab_methodology.md
+ª       ai_context_initial.md
+ª       copilot_methodology.md
+ª       project-setup.md
+ª       project_state_initial.md
+ª       README.md
+ª       
++---schema
+ª   +---excel
++---src
+ª   ª   __init__.py
+ª   ª   
+ª   +---config
+ª   ª       config.py
+ª   ª       
+ª   +---context
+ª   ª       context.py
+ª   ª       
+ª   +---core
+ª   ª   +---adjustment
+ª   ª   ª       adjustment.py
+ª   ª   ª       
+ª   ª   +---ledger
+ª   ª   ª       ledger.py
+ª   ª   ª       ledger_writer.py
+ª   ª   ª       
+ª   ª   +---runner
+ª   ª   ª       retirement_simulator.py
+ª   ª   ª       runner.py
+ª   ª   ª       
+ª   ª   +---schedule
+ª   ª           schedule.py
+ª   ª           
+ª   +---Interface
+ª   ª   +---input
+ª   ª   ª       data_pipeline.py
+ª   ª   ª       wbi.py
+ª   ª   ª       wbi_schema.py
+ª   ª   ª       
+ª   ª   +---output
+ª   ª       +---export
+ª   ª       ª       export_util.py
+ª   ª       ª       
+ª   ª       +---log
+ª   ª       +---visualization
+ª   +---workstream
+ª   ª   ª   scenario_catalog.py
+ª   ª   ª   
+ª   ª   +---montecarlo
+ª   ª   ª       dashboard.py
+ª   ª   ª       sim_montecarlo.py
+ª   ª   ª       sim_montecarlo2.py
+ª   ª   ª       summary.py
+ª   ª   ª       year_logic.py
+ª   ª   ª       
+ª   ª   +---tax
+ª   ª   ª       tax_accessor.py
+ª   ª   ª       tax_engine.py
+ª   ª   ª       tax_loader.py
+ª   ª   ª       tax_registry.py
+ª   ª   ª       tax_schema.py
+ª   ª   ª       tax_table.py
+ª   ª   ª       
+ª   ª   +---withdrawal
+ª   ª           sim_withdrawal.py
+ª   ª           
+ª   +---__pycache__
+ª           __init__.cpython-313.pyc
+ª           
++---test

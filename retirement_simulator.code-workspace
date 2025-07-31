@@ -1,8 +1,15 @@
 {
-	"folders": [
-		{
-			"path": "."
-		}
-	],
-	"settings": {}
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "python.envFile": "${workspaceFolder}/.env",
+    "files.associations": {
+      "*.md": "markdown",
+      "*.json": "jsonc"
+    },
+    "python.experiments.enabled": false
+  }
 }
