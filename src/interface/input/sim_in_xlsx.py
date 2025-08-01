@@ -1,6 +1,6 @@
 # ── Workbook Interface ──────────────────────────
 import pandas as pd
-from src.core.schedule.schedule import SimulationSchedule
+from src.schedule.schedule import SimulationSchedule
 from src.interface.input.config_in_xlsx import ConfigInputXls
 from pathlib import Path
 

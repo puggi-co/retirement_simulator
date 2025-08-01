@@ -9,7 +9,7 @@ from ledger import AccountLedger
 from tax_models import TaxTables
 from src.workstream.withdrawal.sim_withdrawal import simulate_scenario_withdrawals
 from src.workstream.montecarlo.sim_montecarlo import simulate_montecarlo_withdrawals
-from src.core.workstream.tax.tax_accessors import get_tax_tables
+from src.workstream.tax.tax_accessor import get_tax_tables
 from analysis import summarize_spending_sources, log_scenario_summary
 
 from src.workstream.scenario.scenario_config import SCENARIO_CATALOG

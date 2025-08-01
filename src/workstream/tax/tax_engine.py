@@ -1,10 +1,4 @@
-"""
-tax_engine.py
-
-Handles centralized tax computations using reference tables.
-Provides functions for standard deduction, tax bracket lookup, AMT logic, etc.
-Designed to be consumed by simulation scenarios across withdrawal and Monte Carlo workstreams.
-"""
+"""Performs computations using reference tax tables"""
 
 from typing import Optional, Dict
 import pandas as pd

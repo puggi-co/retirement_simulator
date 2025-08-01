@@ -2,9 +2,9 @@ from pathlib import Path
 from datetime import datetime
 from src.interface.output.export.export_util import create_run_subfolder
 from src.interface.input.sim_in_xlsx import SimInputXls
-from src.interface.input.tax_loader import load_tax_tables
+from src.workstream.tax.tax_loader import load_tax_tables
 from src.runner.retirement_simulator import ScenarioRunner
-from src.workstreams.scenarios.scenario_catalog import SCENARIO_CATALOG
+from src.workstream.scenario.scenario_catalog import SCENARIO_CATALOG
 
 # from src.config import 
 # from core.adjustments import apply_adjustments
