@@ -5,7 +5,7 @@ __pycache__/
 
 # 🧪 Jupyter Notebooks & Auto Checkpoints
 *.ipynb
-.ipynb_checkpoints/
+**/.ipynb_checkpoints/
 
 # 🧬 Virtual Environments
 .venv/
@@ -17,21 +17,19 @@ __pycache__/
 !.vscode/tasks.json
 !.vscode/extensions.json
 
-# 📖 Docs Build Artifacts (Preserve Markdown)
-docs/**/*.html
-docs/**/*.pdf
-docs/build/
+# 📖 Document Build Artifacts (Preserve Markdown)
+doc/**/*.html
+doc/**/*.pdf
+doc/build/
 
 # 📁 Modular Repo Artifacts
-src/__pycache__/
-tests/__pycache__/
-schemas/__pycache__/
+**/__pycache__/
 
 # 🧠 AI Collaboration Metadata
 ai-journal/
 *.interactionlog
 *.promptset
-docs/context/journal/
+doc/context/journal/
 
 # 🔬 Test Coverage & Logs
 *.log
@@ -51,3 +49,8 @@ secrets.yaml
 # 🗂️ OS-Specific Clutter
 .DS_Store
 Thumbs.db
+
+# 📊 Retirement Simulator Data
+data/user/
+data/export/
+~$*.xlsx

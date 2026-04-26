@@ -1,0 +1,313 @@
+# ================================================================================
+# RETIREMENT SIMULATION ORCHESTRATOR
+# ================================================================================
+
+import pandas as pd
+import numpy as np
+
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, Any, Optional, List
+
+# Core imports
+from context.context import SimulationContext
+from core.strategy_catalog import STRATEGY_CATALOG, StrategyDefinition
+from core.schedule import SimulationSchedule
+from src.config.config_schema import SimulationConfig
+
+# Input/Output imports 
+from io_input.portfolio_loader import get_portfolio_from_excel
+#from io_input.tax_loader import get_tax_table
+
+# Orchestrator imports
+from orchestration.orch_entity import BatchResults
+
+# Display settings
+from util_dev.debug_util import debug_view
+pd.options.display.float_format = '{:,.2f}'.format
+
+# =================== DATA CLASSES ===================
+
+class RetirementSimulationOrchestrator:
+    """
+    Main orchestrator for retirement simulations - coordinates the entire process
+    """
+    
+    def __init__(self, config_path: Path = None, data_folder: Path = None):
+        """
+        Initialize the orchestrator with configuration and data paths
+        
+        Args:
+            config_path: Path to configuration Excel file
+            data_folder: Path to folder containing data files
+        """
+        # Set up paths
+        self.config_path = config_path or Path("data/config.xlsx")
+        self.data_folder = data_folder or Path("data")
+        
+        # Initialize core components
+        self.config: Optional[SimulationConfig] = None
+        self.tax_table = None
+        self.portfolio_df: Optional[pd.DataFrame] = None
+        self.schedule: Optional[SimulationSchedule] = None
+        
+        # Results tracking
+        self.batch_results: Optional[BatchResults] = None
+        
+        # Setup run metadata
+        self.run_timestamp = datetime.now()
+        self.run_folder = Path("exports") / self.run_timestamp.strftime('%Y_%m_%d_%H%M%S')
+        
+    def export_comprehensive_analysis(self, output_path: Path = None) -> None:
+        """Export comprehensive cross-strategy analysis"""
+        
+        if not self.batch_results:
+            print("No batch results available. Run simulations first.")
+            return
+        
+        output_path = output_path or self.run_folder / "comprehensive_analysis.xlsx"
+        
+        print(f"📊 Generating comprehensive analysis...")
+        
+        with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
+            
+            # Batch summary
+            self._export_batch_overview(writer)
+            
+            # Simulation comparison
+            self._export_simulation_comparison(writer)
+
+            # Monte Carlo summary across simulations
+            self._export_monte_carlo_comparison(writer)
+            
+            # Risk analysis
+            self._export_risk_analysis(writer)
+        
+        print(f"📈 Comprehensive analysis exported: {output_path}")
+    
+    # =================== PRIVATE METHODS ===================
+
+    def _get_strategies_to_run(self, selected_strategies: List[str] = None) -> List[str]:
+        """Get list of strategies to run"""
+        if selected_strategies:
+            # Validate selected strategies
+            invalid = set(selected_strategies) - set(STRATEGY_CATALOG.keys())
+            if invalid:
+                raise ValueError(f"Invalid strategies: {invalid}")
+            return selected_strategies
+        else:
+            return list(STRATEGY_CATALOG.keys())
+    
+    def _get_return_rates(self) -> np.ndarray:
+        """Get array of return rates to simulate"""
+        return np.arange(
+            self.config.return_low_rate,
+            self.config.return_high_rate + self.config.return_increment_rate,
+            self.config.return_increment_rate
+        )
+
+    def _create_simulation_contexts(self, strategy_config: StrategyDefinition, return_rate: float
+    ) -> tuple[SimulationContext, SimulationContext, SimulationSchedule]:
+
+        # ✅ Correct schedule construction
+        schedule = SimulationSchedule.from_account_data(self.portfolio_df, self.config)
+
+        wd_context = SimulationContext(
+            config=self.config,
+            strategy_config=strategy_config,
+            return_rate=return_rate,
+            sim_type='wd'
+        )
+
+        avg_rate = (self.config.return_low_rate + self.config.return_high_rate) / 2
+        mc_context = SimulationContext(
+            config=self.config,
+            strategy_config=strategy_config,
+            return_rate=avg_rate,
+            sim_type='mc'
+        )
+
+        return wd_context, mc_context, schedule
+
+    def _create_run_metadata(self) -> Dict[str, Any]:
+        """Create metadata about the simulation run"""
+        if self.batch_results and self.batch_results.runs:
+            strategies_run = len(set(run.strategy_id for run in self.batch_results.runs))
+        else:
+            strategies_run = 0
+
+        return {
+            'timestamp': self.run_timestamp.isoformat(),
+            'config_file': str(self.config_path),
+            'portfolio_accounts': len(self.portfolio_df),
+            'portfolio_value': float(self.portfolio_df['base_balance'].sum()),
+            'simulation_years': self.schedule.duration,
+            'base_age': self.schedule.base_age,
+            'strategies_run': strategies_run,
+            'return_rate_range': f"{self.config.return_low_rate:.1%} to {self.config.return_high_rate:.1%}",
+            'python_version': f"{pd.__version__} (pandas)"  # Basic version info
+        }
+    
+    def _print_batch_summary(self) -> None:
+        """Print summary of batch execution"""
+        
+        if not self.batch_results:
+            return
+        
+        results = self.batch_results
+        
+        print(f"\n🎉 Batch Execution Complete")
+        print("=" * 60)
+        print(f"Total runs: {len(results.runs)}")
+        print(f"Successful: {results.successful_runs}")
+        print(f"Failed: {results.failed_runs}")
+        print(f"Success rate: {(results.successful_runs/len(results.runs)*100):.1f}%")
+        print(f"Total time: {results.total_execution_time:.1f} seconds")
+        print(f"Average per run: {results.total_execution_time/len(results.runs):.1f} seconds")
+        
+        # Failed runs details
+        if results.failed_runs > 0:
+            print(f"\n❌ Failed Runs:")
+            for run in results.runs:
+                if not run.success:
+                    print(f"   • {run.strategy_id} @ {run.return_rate:.1%}: {run.error_message}")
+
+    def _export_batch_summary(self) -> None:
+        """Export batch summary to Excel"""
+        
+        if not self.batch_results:
+            return
+        
+        summary_path = self.run_folder / "batch_summary.xlsx"
+        
+        # Create summary DataFrame
+        summary_data = []
+        for run in self.batch_results.runs:
+            summary_data.append({
+                'strategy_id': run.strategy_id,
+                'strategy_name': run.strategy_config.sim_name,
+                'return_rate': run.return_rate,
+                'success': run.success,
+                'execution_time_s': run.execution_time,
+                'error_message': run.error_message or '',
+                'output_folder': str(run.run_folder.relative_to(self.run_folder))
+            })
+        
+        summary_df = pd.DataFrame(summary_data)
+        
+        # Export to Excel
+        with pd.ExcelWriter(summary_path, engine='xlsxwriter') as writer:
+            summary_df.to_excel(writer, sheet_name='Run_Summary', index=False)
+            
+            # Metadata
+            metadata_df = pd.DataFrame(
+                list(self.batch_results.run_metadata.items()),
+                columns=['Parameter', 'Value']
+            )
+            metadata_df.to_excel(writer, sheet_name='Metadata', index=False)
+        
+        print(f"📊 Batch summary exported: {summary_path}")
+    
+    def _export_batch_overview(self, writer: pd.ExcelWriter) -> None:
+        """Export batch overview to Excel writer"""
+        
+        # Summary statistics across all runs
+        summary_data = []
+        for run in self.batch_results.runs:
+            if run.success and run.mc_results:
+                # Extract key metrics from Monte Carlo results
+                # This would need to be adapted based on your MC results structure
+                summary_data.append({
+                    'strategy': run.strategy_id,
+                    'return_rate': run.return_rate,
+                    'success_rate': run.mc_results.get_metric('success_rate_%'),
+                    'median_final_balance': run.mc_results.get_metric('median_final_balance', 0),
+                    'failure_rate_0': run.mc_results.get_metric('failure_rate_0', 0)
+                })
+        
+        if summary_data:
+            df = pd.DataFrame(summary_data)
+            df.to_excel(writer, sheet_name='Batch_Overview', index=False)
+    
+    def _export_simulation_comparison(self, writer: pd.ExcelWriter) -> None:
+        """Export simulation comparison to Excel writer"""
+        # Implementation would depend on specific comparison metrics needed
+        pass
+    
+    def _export_monte_carlo_comparison(self, writer: pd.ExcelWriter) -> None:
+        """Export Monte Carlo comparison across simulations"""
+        # Implementation would aggregate MC results across simulations
+        pass
+    
+    def _export_risk_analysis(self, writer: pd.ExcelWriter) -> None:
+        """Export risk analysis across simulations and return rates"""
+        # Implementation would analyze risk metrics across all runs
+        pass
+
+from orchestration.orch_initialize import (
+    initialize, _load_configuration, _load_tax_data,
+    _load_portfolio_data, _create_simulation_schedule,
+    _validate_initialization
+)
+
+RetirementSimulationOrchestrator.initialize = initialize
+RetirementSimulationOrchestrator._load_configuration = _load_configuration
+RetirementSimulationOrchestrator._load_tax_data = _load_tax_data
+RetirementSimulationOrchestrator._load_portfolio_data = _load_portfolio_data
+RetirementSimulationOrchestrator._create_simulation_schedule = _create_simulation_schedule
+RetirementSimulationOrchestrator._validate_initialization = _validate_initialization
+
+from orchestration.orch_strategy import (
+    run_all_strategies, run_single_strategy, _run_strategy_suite
+)
+
+RetirementSimulationOrchestrator.run_all_strategies = run_all_strategies
+RetirementSimulationOrchestrator.run_single_strategy = run_single_strategy
+RetirementSimulationOrchestrator._run_strategy_suite = _run_strategy_suite
+
+# =================== MAIN ORCHESTRATION FUNCTION ===================
+
+def main():
+    """
+    Main orchestration function - simplified and cleaner
+    """
+    
+    # Initialize orchestrator
+    orchestrator = RetirementSimulationOrchestrator()
+    orchestrator.initialize()
+
+    # Run all strategies (or specify selected ones)
+    batch_results = orchestrator.run_all_strategies(
+         selected_strategies=['fixed_rate', 'fixed_amount', 'guardrail_amount']  # Optional filter
+    )
+
+    # Generate comprehensive analysis
+    orchestrator.export_comprehensive_analysis()
+    
+    print(f"\n🎯 All simulations complete!")
+    print(f"📁 Results available in: {orchestrator.run_folder}")
+    
+    return batch_results
+
+# =================== UTILITY FUNCTIONS ===================
+
+def run_quick_test(strategy_id: str = 'fixed_rate', return_rate: float = 0.06):
+    """
+    Quick test function for development/debugging
+    """
+    
+    orchestrator = RetirementSimulationOrchestrator()
+    orchestrator.initialize()
+
+    result = orchestrator.run_single_strategy(
+        strategy_id=strategy_id,
+        return_rate=return_rate,
+        mc_simulations=100  # Smaller for testing
+    )
+    
+    print(f"Test complete: {result.success}")
+    return result
+
+
+if __name__ == "__main__":
+    main()

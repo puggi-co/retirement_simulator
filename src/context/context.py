@@ -1,65 +1,57 @@
-from dataclasses import dataclass, field
-from typing import Optional
-#import datetime
+from dataclasses import dataclass, asdict
+from typing import Optional, Any
+from datetime import datetime as dt
 import pandas as pd
-#from pathlib import Path
 
-from src.config.config import SimulationConfig
-from src.schedule.schedule import SimulationSchedule
-from src.ledger.ledger_writer import LedgerWriterMixin
+from src.config.config_schema import SimulationConfig
+from src.core.strategy_catalog import StrategyDefinition
 
-#from src.workstream.tax.tax_accessors import TaxTables
-#from src.workstream.tax.tax_tables import load_tax_tables
-
-class DictMixin:
-    def as_dict(self):
-        return {
-            field.name: getattr(self, field.name)
-            for field in self.__dataclass_fields__.values()
-        }
-
-    def to_summary_row(self, extra: Optional[dict] = None):
-        row = self.as_dict()
-        if extra:
-            row.update(extra)
-        row['timestamp'] = datetime.datetime.now().isoformat()
-        return dict(sorted(row.items()))
-
+# ── Unified Simulation Context ───────────────────
 @dataclass
-class SimulationContext(DictMixin):
-    scenario_id: str = 'unknown'
-    withdrawal_mode: str = 'unknown'
+class SimulationContext:
+    # Core simulation identifiers
+    sim_mode: str = 'fixed_rate'
+    sim_id: str = 'mc_fixed_rate'
+    sim_rate: float = 0.04
+    sim_type: str = 'mc'  # 'mc' for Monte Carlo, 'wd' for Withdrawal
+
+    # Injected components
     config: Optional[SimulationConfig] = None
-    schedule: SimulationSchedule = field(default_factory=SimulationSchedule)
+    strategy_config: Optional[StrategyDefinition] = None
+    return_rate: Optional[float] = None
 
-    def __repr__(self):
-        return f"SimulationContext(scenario_id='{self.scenario_id}', withdrawal_mode='{self.withdrawal_mode}')"
+    # Runtime state (optional)
+    portfolio: Optional[pd.DataFrame] = None
+    tax_table: Optional[Any] = None
 
-    def __str__(self):
-        return f"{self.scenario_id} ({self.withdrawal_mode})"
+    def __post_init__(self):
+        if self.strategy_config and hasattr(self.strategy_config, 'strategy_id'):
+            self.sim_id = self.strategy_config.strategy_id
+        if self.return_rate is not None:
+            self.sim_rate = self.return_rate
 
-    def get(self, key: str, default=None):
-        if self.config:
-            return getattr(self.config, key, default)
-        return default
+    def __repr__(self) -> str:
+        return f"SimulationContext(sim_id='{self.sim_id}', sim_mode='{self.sim_mode}', sim_type='{self.sim_type}')"
 
-    @property
-    def is_montecarlo(self) -> bool:
-        return self.scenario_id.startswith('mc_')
+    def __str__(self) -> str:
+        return f"{self.sim_id} ({self.sim_mode}, {self.sim_type})"
 
-    def to_summary_row(self, summary_df: Optional[pd.DataFrame] = None) -> dict:
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self.config, key, default) if self.config else default
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def to_summary_row(self, summary_df: Optional[pd.DataFrame] = None) -> dict[str, Any]:
         row = {
-            'scenario_id': self.scenario_id,
-            'withdrawal_mode': self.withdrawal_mode,
-            'inflation_rate': self.get('inflation_rate'),
-            'max_tax_rate': self.get('max_tax_rate'),
-            'config_years': self.get('years'),
-            'guardrail_floor': self.get('guardrail_floor'),
-            'guardrail_ceiling': self.get('guardrail_ceiling'),
-            'seed': self.get('seed'),
-            'montecarlo': self.is_montecarlo,
-            'timestamp': datetime.datetime.now().isoformat()
+            'sim_id': self.sim_id,
+            'sim_mode': self.sim_mode,
+            'sim_type': self.sim_type,
+            'timestamp': dt.now().isoformat()
         }
+
+        if self.config:
+            row.update(self.config.to_dict())
 
         if isinstance(summary_df, pd.DataFrame):
             for col in summary_df.columns:
@@ -67,30 +59,10 @@ class SimulationContext(DictMixin):
 
         return dict(sorted(row.items()))
 
-@dataclass
-class FinancialAdjustmentMixin:
-    config: Optional[SimulationConfig] = None
-
-    def adjust_for_inflation(self, value: float, years: int) -> float:
-        return value * ((1 + self.config.inflation_rate) ** years)
-
-    def adjust_for_real_spend(self, value: float, years: int) -> float:
-        return value / ((1 + self.config.inflation_rate) ** years)
-
-@dataclass
-class WithdrawalContext(SimulationContext, FinancialAdjustmentMixin, LedgerWriterMixin):
-
-    def apply_guardrails(self, rate: float) -> float:
-        return self.config.withdrawal.apply_guardrails(rate)
-
-    def use_inflation(self) -> bool:
-        return self.config.adjust_for_inflation
-
-    def compute_real_spend(self, net_spend: float, ydx: int) -> float:
-        return self.adjust_for_real_spend(net_spend, ydx)
-
-@dataclass
-class MonteCarloContext(SimulationContext):
-
     def sample_return(self, year: int = 0) -> float:
-        return self.config.montecarlo.sample(year)
+        if self.sim_type == 'mc' and self.config:
+            return self.config.sample_return(year)
+        return self.sim_rate
+
+    def get_return_rate(self, year: int = 0) -> float:
+        return self.sample_return(year)
