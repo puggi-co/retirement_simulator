@@ -1,7 +1,7 @@
 import pandas as pd
 
 from withdrawal.wd_ledger import WithdrawalLedger
-from util_dev.debug_util import debug_view
+from src.io.export_util import debug_view
 
 def summarize_spending_sources(wd_ledger: WithdrawalLedger) -> pd.DataFrame:
     """

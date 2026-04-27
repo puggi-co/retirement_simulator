@@ -6,7 +6,7 @@ import pandas as pd
 from src.orchestration.outcome_ledger import OutcomeLedger
 from orchestration.orch_entity import WDAnalyzeResults
 
-from util_dev.debug_util import debug_view
+from src.io.export_util import debug_view
 
 def wd_summarize_outcomes(
     outcome_ledger: OutcomeLedger,

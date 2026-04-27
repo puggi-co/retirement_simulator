@@ -10,20 +10,20 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 # Core imports
-from context.context import SimulationContext
-from core.strategy_catalog import STRATEGY_CATALOG, StrategyDefinition
-from core.schedule import SimulationSchedule
+from src.context.context import SimulationContext
+from src.core.strategy_catalog import STRATEGY_CATALOG, StrategyDefinition
+from src.core.schedule import SimulationSchedule
 from src.config.config_schema import SimulationConfig
 
 # Input/Output imports 
-from io_input.portfolio_loader import get_portfolio_from_excel
-#from io_input.tax_loader import get_tax_table
+from src.io.portfolio_loader import get_portfolio_from_excel
+#from src.io.tax_loader import get_tax_table
 
 # Orchestrator imports
-from orchestration.orch_entity import BatchResults
+from src.orchestration.orch_entity import BatchResults
 
 # Display settings
-from util_dev.debug_util import debug_view
+from src.export_util import debug_view
 pd.options.display.float_format = '{:,.2f}'.format
 
 # =================== DATA CLASSES ===================
@@ -36,14 +36,14 @@ class RetirementSimulationOrchestrator:
     def __init__(self, config_path: Path = None, data_folder: Path = None):
         """
         Initialize the orchestrator with configuration and data paths
-        
-        Args:
-            config_path: Path to configuration Excel file
-            data_folder: Path to folder containing data files
         """
-        # Set up paths
-        self.config_path = config_path or Path("data/config.xlsx")
-        self.data_folder = data_folder or Path("data")
+        # Assumes this file is in project_root/src/orchestration/retirement_orchestrator.py
+        # Going up 3 levels brings us perfectly to project_root/
+        self.project_root = Path(__file__).resolve().parent.parent.parent
+        
+        # Fallback to the pristine new layout we designed earlier
+        self.data_folder = data_folder or self.project_root / "data"
+        self.config_path = config_path or self.data_folder / "user" / "config.xlsx"
         
         # Initialize core components
         self.config: Optional[SimulationConfig] = None
@@ -56,31 +56,27 @@ class RetirementSimulationOrchestrator:
         
         # Setup run metadata
         self.run_timestamp = datetime.now()
-        self.run_folder = Path("exports") / self.run_timestamp.strftime('%Y_%m_%d_%H%M%S')
+        self.run_folder = self.data_folder / "export" / self.run_timestamp.strftime('%Y_%m_%d_%H%M%S')
         
-    def export_comprehensive_analysis(self, output_path: Path = None) -> None:
+    def export_comprehensive_analysis(self, output_path: Optional[Path] = None) -> None:
         """Export comprehensive cross-strategy analysis"""
         
         if not self.batch_results:
             print("No batch results available. Run simulations first.")
             return
         
+        # 🎯 Passes the path straight down to the operations
         output_path = output_path or self.run_folder / "comprehensive_analysis.xlsx"
         
         print(f"📊 Generating comprehensive analysis...")
         
+        # Ensure the subfolder exists dynamically
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
         with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
-            
-            # Batch summary
             self._export_batch_overview(writer)
-            
-            # Simulation comparison
             self._export_simulation_comparison(writer)
-
-            # Monte Carlo summary across simulations
             self._export_monte_carlo_comparison(writer)
-            
-            # Risk analysis
             self._export_risk_analysis(writer)
         
         print(f"📈 Comprehensive analysis exported: {output_path}")
@@ -244,7 +240,7 @@ class RetirementSimulationOrchestrator:
         # Implementation would analyze risk metrics across all runs
         pass
 
-from orchestration.orch_initialize import (
+from src.orchestration.orch_initialize import (
     initialize, _load_configuration, _load_tax_data,
     _load_portfolio_data, _create_simulation_schedule,
     _validate_initialization
@@ -257,7 +253,7 @@ RetirementSimulationOrchestrator._load_portfolio_data = _load_portfolio_data
 RetirementSimulationOrchestrator._create_simulation_schedule = _create_simulation_schedule
 RetirementSimulationOrchestrator._validate_initialization = _validate_initialization
 
-from orchestration.orch_strategy import (
+from src.orchestration.orch_strategy import (
     run_all_strategies, run_single_strategy, _run_strategy_suite
 )
 

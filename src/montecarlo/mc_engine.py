@@ -7,7 +7,7 @@ from typing import List, Any
 
 from src.context.context import SimulationContext
 from src.core.schedule import SimulationSchedule
-from src.io_input.tax_loader import TaxTable
+from src.io.tax_loader import TaxTable
 from src.montecarlo.mc_simulator import MonteCarloSimulator
 from src.montecarlo.mc_summary_core import MonteCarloAnalyzer
 

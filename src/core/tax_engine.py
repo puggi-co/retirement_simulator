@@ -3,7 +3,7 @@
 from typing import Optional, Dict
 import pandas as pd
 
-from src.io_input.tax_loader import FilingStatus
+from src.io.tax_loader import FilingStatus
 
 def get_standard_deduction(year: int, status: str) -> Optional[float]:
     table = get_standard_deduction_table()

@@ -20,7 +20,7 @@ from withdrawal.wd_ledger import WithdrawalLedger
 from withdrawal.wd_analyze_summary import wd_summarize_outcomes
 from withdrawal.wd_analyze_util import summarize_spending_sources
 
-from util_dev.debug_util import debug_view
+from src.io.export_util import debug_view
 
 class WithdrawalRunner:
     '''Manages the withdrawal simulation process'''

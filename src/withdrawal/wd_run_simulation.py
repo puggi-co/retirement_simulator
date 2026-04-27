@@ -7,7 +7,7 @@ from src.context.context import SimulationContext
 from src.core.schedule import SimulationSchedule
 from src.core.spending_util import SpendingModel
 from src.core.tax_engine import calculate_tax
-from src.io_input.tax_loader import TaxTable
+from src.io.tax_loader import TaxTable
 
 from src.withdrawal.wd_ledger import WithdrawalLedger
 from src.withdrawal.wd_analyze_year import YearAnnotation
@@ -17,7 +17,7 @@ from src.withdrawal.wd_run_withdrawal import (
     apply_amount_based_withdrawals
 )
 
-from util_dev.debug_util import debug_view
+from src.io.export_util import debug_view
 
 def simulate_withdrawal(context: SimulationContext, schedule: SimulationSchedule, tax_table: TaxTable,
                         spending_model: SpendingModel, portfolio_df: pd.DataFrame, wd_ledger: WithdrawalLedger) -> dict:

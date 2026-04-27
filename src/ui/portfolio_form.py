@@ -1,5 +1,5 @@
 import streamlit as st
-from src.io_input.portfolio_loader import get_portfolio_from_streamlit
+from src.io.portfolio_loader import get_portfolio_from_streamlit
 
 form_data = {
     "account_name": st.text_input("Account Name"),

@@ -6,7 +6,7 @@ from src.config.config_schema import (
     REQUIRED_COLUMNS,
     SimulationConfig
 )
-from io_input.excel_loader import ExcelSchemaLoader
+from io.excel_loader import ExcelSchemaLoader
 
 class SimulationConfigLoader(ExcelSchemaLoader):
     def __init__(self, workbook_path: str):
