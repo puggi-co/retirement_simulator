@@ -1,7 +1,6 @@
 # Wraps a DataFrame to enforce column order, validates schema, and supports layered/grouped operations (e.g. temporal, financial, metadata).
  
 import pandas as pd
-from typing import Any, Dict
 
 class SchemaFrame:
     def __init__(self, df: pd.DataFrame, columns: list[str], dtypes: dict[str, str], label: str = "DataFrame"):
@@ -38,7 +37,7 @@ class SchemaFrame:
             raise ValueError(f"❌ {self.label} failed strict validation. Missing: {missing_cols}")
 
     def enforce_order(self):
-        from src.core.schema_util import enforce_column_order
+        from core.schema_util import enforce_column_order
         self.df = enforce_column_order(self.df, self.columns, strict=False)
 
     def get_group(self, group_name: str, group_map: dict[str, list[str]]) -> pd.DataFrame:

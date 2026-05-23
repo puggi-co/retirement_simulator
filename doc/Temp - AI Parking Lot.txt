@@ -1,0 +1,6 @@
+generate:
+🔹 The aggregation logic WD → Outcome
+🔹 The QCD handling logic
+🔹 The updated Tax Summary Ledger schema
+🔹 The 1040 mapping table
+🔹 The IRMAA MAGI calculation pipeline

@@ -1,12 +1,11 @@
-from altair import param
 import pandas as pd
 from typing import Dict, Any
-from src.config.config_schema import (
+from config.config_schema import (
     TABS,
     REQUIRED_COLUMNS,
     SimulationConfig
 )
-from io.excel_loader import ExcelSchemaLoader
+from loader.excel_loader import ExcelSchemaLoader
 
 class SimulationConfigLoader(ExcelSchemaLoader):
     def __init__(self, workbook_path: str):

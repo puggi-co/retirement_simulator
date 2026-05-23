@@ -3,26 +3,33 @@
 import json
 import pandas as pd
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
 
-from src.config.config_schema import SimulationConfig
+from config.config_schema import SimulationConfig
+from core.rmd_util import enrich_portfolio_rmd
 
-from src.core.schema_constants import (
+from core.schema_frame import SchemaFrame
+from loader.loader_schema import (
     ACCOUNT_SHEET_COLUMNS, ACCOUNT_SHEET_DTYPES,
     INCOME_SHEET_COLUMNS, INCOME_SHEET_DTYPES,
+    EXCEL_CONDITIONAL_COLUMNS,
     PORTFOLIO_SCHEMA_COLUMNS, PORTFOLIO_SCHEMA_DTYPES
 )
-from src.core.schema_frame import SchemaFrame
-from src.core.schema_util import normalize_column, normalize_numeric_columns, fill_nulls_by_dtype
-from src.core.schema_util import LKUP_ACCOUNT_TAX_TYPE
+from core.schema_util import (
+    LKUP_SOURCE_TAX_TYPE,
+    normalize_column, normalize_numeric_columns, fill_nulls_by_dtype
+)
 
-from src.core.rmd_util import enrich_portfolio_rmd
+from loader.excel_loader import ExcelSchemaLoader
+#from storage.export_util import debug_view
 
-from src.io.excel_loader import ExcelSchemaLoader
+# Determine project root (src/ is one level below project root)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-from src.io.export_util import debug_view
+# Default JSON location (adjust folder as needed)
+DEFAULT_JSON = PROJECT_ROOT / "data" / "user" / "in_account.json"
+
 
 # ── Tab and Schema Definitions ─────────────────
 
@@ -31,19 +38,6 @@ TABS: List[str] = ['My_Account', 'My_Income']
 REQUIRED_COLUMNS: Dict[str, Dict[str, str]] = {
     'My_Account': {col: ACCOUNT_SHEET_DTYPES[col] for col in ACCOUNT_SHEET_COLUMNS},
     'My_Income': {col: INCOME_SHEET_DTYPES[col] for col in INCOME_SHEET_COLUMNS}
-}
-
-CONDITIONAL_COLUMNS: Dict[str, List[Dict[str, Dict[str, str]]]] = {
-    'My_Account': [
-        {
-            'if': {'account_type': 'ira-inherited'},
-            'then': {
-                'prior_owner_birthdate_iso': 'string',
-                'prior_owner_death_year': 'Int64',
-                'beneficiary_birth_year': 'Int64'
-            }
-        }
-    ]
 }
 
 class PortfolioInputSource:
@@ -56,25 +50,15 @@ class ExcelPortfolioLoader(PortfolioInputSource):
     def __init__(self, file_path: Path):
         self.file_path = file_path
 
-    def load(self) -> SchemaFrame:
+    def load(self):
         cleaned = ExcelSchemaLoader.load_and_clean(
             file_path=self.file_path,
             tabs=TABS,
             required_columns=REQUIRED_COLUMNS,
-            conditional_columns=CONDITIONAL_COLUMNS
+            conditional_columns=EXCEL_CONDITIONAL_COLUMNS
         )
 
-        merged_df = pd.concat([cleaned['My_Account'], cleaned['My_Income']], ignore_index=True)
-
-        frame = SchemaFrame(
-            df=merged_df,
-            columns=PORTFOLIO_SCHEMA_COLUMNS,
-            dtypes=PORTFOLIO_SCHEMA_DTYPES,
-            label="Portfolio Base"
-        )
-
-        frame.validate(strict=True)
-        return frame
+        return cleaned['My_Account'], cleaned['My_Income']
 
 # ── JSON Portfolio Loader ─────────────────────
 
@@ -131,12 +115,14 @@ def prepare_portfolio(config: SimulationConfig, df_my_account, df_my_income) -> 
 
     # Conform column names
     my_account_df = my_account_df.rename(columns={
-        'account_balance': 'base_balance',
-        'begin_age': 'distribution_age'
-    })    
+    'account_name': 'source_name',
+    'account_type': 'source_type',
+    'account_balance': 'base_balance'
+    })
+
     my_income_df = my_income_df.rename(columns={
-        'income_name': 'account_name',
-        'income_type': 'account_type',
+        'income_name': 'source_name',
+        'income_type': 'source_type',
         'income': 'base_balance',
         'begin_age': 'distribution_age'
     })
@@ -145,7 +131,7 @@ def prepare_portfolio(config: SimulationConfig, df_my_account, df_my_income) -> 
     merged_df = pd.concat([my_account_df, my_income_df], ignore_index=True)
 
     # Add lookup for account tax type
-    merged_df = merged_df.merge(LKUP_ACCOUNT_TAX_TYPE, on='account_type', how='left')
+    merged_df = merged_df.merge(LKUP_SOURCE_TAX_TYPE, on='source_type', how='left')
 
     # Drop rows with non-positive balance
     merged_df = merged_df[merged_df['base_balance'] > 0]
@@ -156,7 +142,7 @@ def prepare_portfolio(config: SimulationConfig, df_my_account, df_my_income) -> 
 
     # Normalize Portfolio Columns
     merged_df['filing_status'] = normalize_column(merged_df, 'filing_status', 'unknown', 'Portfolio')
-    merged_df['account_type'] = normalize_column(merged_df, 'account_type', 'unknown', 'Portfolio')
+    merged_df['source_type'] = normalize_column(merged_df, 'source_type', 'unknown', 'Portfolio')
 
     # RMD Enrichment
     merged_df = enrich_portfolio_rmd(merged_df, config)
@@ -204,11 +190,7 @@ def get_portfolio_from_json(json_path: Path = Path("data/in_account.json"), conf
 
 # ── Public Entry Point ─────────────────────────
 
-def get_portfolio_from_excel(file_path: Path = Path("data/in_account.xlsx")) -> pd.DataFrame:
-    loader = ExcelPortfolioLoader(file_path)
-    return loader.load().export()
-
-def get_portfolio_from_json(json_path: Path = Path("data/in_account.json")) -> pd.DataFrame:
+def get_portfolio_from_json(json_path: Path):
     loader = JSONPortfolioLoader(json_path)
     return loader.load().export()
 
@@ -245,7 +227,7 @@ class AccountExcel(ExcelSchemaLoader):
             self.workbook,
             self.tabs,
             REQUIRED_COLUMNS,
-            CONDITIONAL_COLUMNS
+            EXCEL_CONDITIONAL_COLUMNS
         )
         
         self.df_my_account = SchemaFrame(

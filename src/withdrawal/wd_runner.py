@@ -4,52 +4,50 @@ import pandas as pd
 from pathlib import Path
 from typing import Any, Optional
 
-from orchestration import outcome_ledger
-from src.context.context import SimulationContext
+from context.context import SimulationContext
 from orchestration.orch_entity import (
     WDRunResults,
     WDMetadata,
     WDStrategyResults
 )
 
-from src.core.schedule import SimulationSchedule
-from src.core.spending_util import SpendingModel
-from orchestration.outcome_ledger import build_outcome_from_ledger
-from withdrawal.wd_run_simulation import simulate_withdrawal
+from core.spending_util import SpendingModel
+from withdrawal.wd_outcome import build_outcome_from_ledger
+from withdrawal.wd_engine_runner import run_withdrawal_simulation
 from withdrawal.wd_ledger import WithdrawalLedger
-from withdrawal.wd_analyze_summary import wd_summarize_outcomes
-from withdrawal.wd_analyze_util import summarize_spending_sources
+from withdrawal.wd_util import summarize_spending_sources, wd_summarize_outcomes
 
-from src.io.export_util import debug_view
+from loader.export_util import debug_view
 
 class WithdrawalRunner:
     '''Manages the withdrawal simulation process'''
 
     REQUIRED_PORTFOLIO_COLUMNS = [
-        'base_balance', 'account_type', 'filing_status'
+        'base_balance', 'source_type', 'filing_status'
     ]
 
     REQUIRED_WITHDRAWAL_COLUMNS = [
-        'sim_mode', 'sim_id', 'sim_rate',
+        'strategy_id', 'sim_mode', 'sim_rate',
         'base_balance', 'wd_amount', 'wd_type', 'shortfall_amount',
-        'account_name', 'account_type', 'year'
+        'source_name', 'source_type', 'year'
     ]
 
-    def __init__(self, context: SimulationContext, schedule: SimulationSchedule, portfolio_df: pd.DataFrame, tax_table: Any):
+    def __init__(self, context: SimulationContext, portfolio_df: pd.DataFrame, tax_table: Any):
+        
         self.context = context
-        self.schedule = schedule
+        self.schedule = context.schedule
         self.portfolio_df = portfolio_df
-        self.tax_table = tax_table
         self.spending_model = SpendingModel(
             config=context.config,
             context=context,
-            schedule=schedule
-        )   
+            schedule=context.schedule
+        )
+
         self.results: Optional[WDStrategyResults] = None
         self.spending_summary: Optional[pd.DataFrame] = None
 
     def run(self) -> WDStrategyResults:
-        print(f'🎲 Running Withdrawal simulation [{self.context.sim_id}]...')
+        print(f'🎲 Running Withdrawal simulation [{self.context.strategy_id}]...')
         print(f'   • Mode: {self.context.sim_mode}')
         print(f'   • Duration: {self.schedule.duration} years')
 
@@ -60,12 +58,10 @@ class WithdrawalRunner:
         debug_view(wd_portfolio_df, '1. WithdrawalRunner - Prepared Portfolio')
 
         # Step 2: Run simulation
-        wd_ledger = WithdrawalLedger(config=self.context.config)
+        wd_ledger = WithdrawalLedger(context=self.context)
 
-        raw_data = simulate_withdrawal(
+        raw_data = run_withdrawal_simulation(
             context=self.context,
-            schedule=self.schedule,
-            tax_table=self.tax_table,
             spending_model=self.spending_model,
             portfolio_df=wd_portfolio_df,
             wd_ledger=wd_ledger
@@ -73,29 +69,29 @@ class WithdrawalRunner:
         debug_view(wd_ledger.frame.df, '2. WithdrawalRunner - Withdrawal Ledger')
 
         # Step 3: Wrap raw results
-        outcome_ledger = build_outcome_from_ledger(wd_ledger, self.context, self.schedule, self.spending_model)
-        outcome_ledger.validate_consistency(wd_ledger.frame.df)
+        wd_outcome = build_outcome_from_ledger(wd_ledger, self.context, self.spending_model)
+        wd_outcome.validate_consistency(wd_ledger.frame.df)
     
         run_results = WDRunResults(
             dashboard_df=raw_data['df_dashboard'],
             annotations=raw_data['all_annotations'],
             total_withdrawn=raw_data['total_withdrawn'],
-            outcome_ledger=outcome_ledger,
+            wd_outcome=wd_outcome,
             wd_ledger=wd_ledger
         )
-#        debug_view(run_results.annotations, '3. WithdrawalRunner - Year Annotations')
-#        debug_view(run_results.dashboard_df, '3. WithdrawalRunner - Dashboard DataFrame')
-        debug_view(run_results.outcome_ledger.frame.df, '3. WithdrawalRunner - Outcome Ledger')
+        debug_view(run_results.annotations, '3. WithdrawalRunner - Year Annotations')
+        debug_view(run_results.dashboard_df, '3. WithdrawalRunner - Dashboard DataFrame')
+        debug_view(run_results.wd_outcome.frame.df, '3. WithdrawalRunner - Outcome Ledger')
 
         # Step 4: Analyze results
-        analysis = wd_summarize_outcomes(run_results.outcome_ledger)
+        analysis = wd_summarize_outcomes(run_results.wd_outcome)
 
         # Step 5: Metadata
         metadata = WDMetadata(
-            sim_id=self.context.sim_id,
-            return_rate=self.context.return_rate,
             duration=self.schedule.duration,
+            strategy_id=self.context.strategy_id,
             sim_mode=self.context.sim_mode,
+            return_rate=self.context.return_rate,
             success=True
         )
 
@@ -115,10 +111,10 @@ class WithdrawalRunner:
         if not self.results:
             raise RuntimeError("Withdrawal results not available.")
 
-        excel_path = output_folder / f"{self.context.sim_id}_withdrawal.xlsx"
+        excel_path = output_folder / f"{self.context.strategy_id}_withdrawal.xlsx"
         with pd.ExcelWriter(excel_path, engine='xlsxwriter') as writer:
             self.results.run.wd_ledger.frame.df.to_excel(writer, sheet_name='Withdrawal Ledger', index=False)
-            self.results.run.outcome_ledger.frame.df.to_excel(writer, sheet_name='Withdrawals', index=False)
+            self.results.run.wd_outcome.frame.df.to_excel(writer, sheet_name='Outcome Summary', index=False)
             if self.spending_summary is not None:
                 self.spending_summary.to_excel(writer, sheet_name='Spending Summary', index=False)
 
@@ -138,30 +134,48 @@ class WithdrawalRunner:
         if missing:
             raise ValueError(f"Missing required portfolio columns: {missing}")
 
-    def _prepare_wd_portfolio(self, df_portfolio: pd.DataFrame) -> pd.DataFrame:
-        """Augments user portfolio with computed columns needed for simulation."""
-        wd_portfolio_df = df_portfolio.copy()
+    def _prepare_wd_portfolio(self, portfolio_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Prepare portfolio for withdrawal simulation.
 
-        wd_portfolio_df['year'] = None
-        wd_portfolio_df['age'] = None
+        - Preserve enriched RMD fields (distribution_year, distribution_age, etc.)
+        - DO NOT touch owner_age (belongs to portfolio enrichment)
+        - Set simulation age from schedule
+        - Set simulation year from schedule
+        """
 
-        base_balance = wd_portfolio_df['base_balance']
-        wd_portfolio_df['current_balance'] = base_balance
-        wd_portfolio_df['end_balance'] = base_balance
+        schedule = self.context.schedule
+        df = portfolio_df.copy()
 
-        wd_portfolio_df['sim_mode'] = self.context.sim_mode
-        wd_portfolio_df['sim_id'] = self.context.sim_id
-        wd_portfolio_df['sim_rate'] = self.context.sim_rate
+        # ---------------------------------------------------------
+        # 1. Simulation temporal fields
+        # ---------------------------------------------------------
+        df['year'] = schedule.base_year
+        df['age'] = schedule.base_age   # simulation age (your age)
 
-        wd_portfolio_df['withdraw_type'] = 'none'
-        wd_portfolio_df[['withdraw_amount', 'taxable_gain', 'taxable_income', 'tax_owed', 'effective_tax_rate']] = 0.0
+        # ---------------------------------------------------------
+        # 2. Simulation metadata
+        # ---------------------------------------------------------
+        df['strategy_id'] = self.context.strategy_id
+        df['sim_mode'] = self.context.sim_mode
+        df['sim_rate'] = self.context.sim_rate
 
-        wd_portfolio_df = wd_portfolio_df[[  # column ordering
-            'year', 'age', 'sim_mode', 'sim_id', 'sim_rate',
-            'current_balance', 'end_balance', 'withdraw_amount', 'withdraw_type',
-            'taxable_gain', 'taxable_income', 'tax_owed', 'effective_tax_rate',
-            'base_balance', 'distribution_year', 'distribution_age', 'distribution_table',
-            'account_name', 'account_type', 'account_tax_type', 'filing_status'
-        ]]
+        # ---------------------------------------------------------
+        # 3. Initialize balances
+        # ---------------------------------------------------------
+        df['current_balance'] = df['base_balance']
+        df['end_balance'] = df['base_balance']
 
-        return wd_portfolio_df
+        # ---------------------------------------------------------
+        # 4. Initialize withdrawal/tax fields
+        # ---------------------------------------------------------
+        df['withdraw_amount'] = 0.0
+        df['withdraw_type'] = 'none'
+        df['taxable_gain'] = 0.0
+        df['taxable_income'] = 0.0
+        df['tax_owed'] = 0.0
+        df['effective_tax_rate'] = 0.0
+        df['effective_distribution_age'] = df['distribution_age']
+        df['effective_distribution_year'] = df['distribution_year']
+
+        return df

@@ -4,12 +4,10 @@ import pandas as pd
 from typing import List, Dict, Any
 
 from core.schedule import SimulationSchedule
+#from storage.export_util import debug_view
 
 
-from src.io.export_util import debug_view
-
-
-def validate_mc_inputs(context: 'SimulationContext', schedule: SimulationSchedule portfolio_df: pd.DataFrame, 
+def validate_mc_inputs(context: 'SimulationContext', schedule: SimulationSchedule, portfolio_df: pd.DataFrame, 
                       num_simulations: int) -> None:
     """Validate Monte Carlo simulation inputs"""
     
@@ -21,13 +19,13 @@ def validate_mc_inputs(context: 'SimulationContext', schedule: SimulationSchedul
         raise ValueError("Context must specify wd_type")
 
     # Validate portfolio
-    required_portfolio_cols = ['account_tax_type', 'base_balance', 'account_type']
+    required_portfolio_cols = ['source_tax_type', 'base_balance', 'source_type']
     missing_cols = [col for col in required_portfolio_cols if col not in portfolio_df.columns]
     if missing_cols:
         raise ValueError(f"Missing required portfolio columns: {missing_cols}")
     
     # Check for investment accounts
-    investment_accounts = portfolio_df['account_tax_type'].isin(['taxable', 'deferred', 'exempt'])
+    investment_accounts = portfolio_df['source_tax_type'].isin(['taxable', 'deferred', 'exempt'])
     if not investment_accounts.any():
         raise ValueError("Portfolio must contain at least one investment account")
     
@@ -43,7 +41,7 @@ def validate_mc_results(df_results: pd.DataFrame) -> None:
     """Validate Monte Carlo results DataFrame"""
     
     required_cols = [
-        'year', 'age', 'sim_mode', 'sim_id', 'sim_type',
+        'year', 'age', 'strategy_id', 'sim_mode', 'sim_type',
         'base_balance', 'wd_amount', 'wd_type'
     ]
     
@@ -69,7 +67,6 @@ def harmonize_mc_columns(df: pd.DataFrame) -> pd.DataFrame:
     column_mapping = {
         'portfolio_balance': 'base_balance',
         'end_balance': 'base_balance',
-        'mc_id': 'sim_num',
         'sim_type': 'sim_type',
         'sim_mode': 'withdrawal_mode'
     }
@@ -122,7 +119,7 @@ def create_simulation_summary(context: 'SimulationContext',
     
     summary = {
         'simulation_info': {
-            'sim_id': context.sim_id,
+            'strategy_id': context.strategy_id,
             'sim_mode': context.sim_mode,
             'duration_years': schedule.duration,
             'withdrawal_mode': getattr(context, 'withdrawal_mode', 'Unknown'),

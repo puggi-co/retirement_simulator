@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import date
 from typing import Optional
-from src.config.config_schema import SimulationConfig
+from config.config_schema import SimulationConfig
 
 @dataclass
 class SimulationSchedule:
@@ -46,7 +46,7 @@ class SimulationSchedule:
     def from_account_data(cls, df_my_account, config: SimulationConfig) -> "SimulationSchedule":
         """Factory method to build SimulationSchedule from portfolio and config."""
         base_year = int(config.base_year)
-        base_age = int(df_my_account['owner_age'].min())
+        base_age = int(df_my_account['age'].min())
         duration = int(config.retire_max_age - base_age)
         end_year = base_year + duration - 1
         end_age = base_age + duration

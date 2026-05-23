@@ -1,21 +1,37 @@
 import pandas as pd
 from datetime import datetime, date
 
-from src.config.config_schema import SimulationConfig
-from src.core.schedule import SimulationSchedule
-#from src.io.export_util import debug_view
+from config.config_schema import SimulationConfig
+from core.schedule import SimulationSchedule, calculate_age
+#from storage.export_util import debug_view
 
 # ── RMD Enrichment ──────────────────────────────
 
-def rmd_enrichment(account: pd.Series, owner_birth_date: date, owner_age: int, base_year: int) -> dict:
+def rmd_enrichment(account: pd.Series, owner_birth_date: date, age: int, base_year: int) -> dict:
     """
     Determine distribution metadata for an account.
     """
-    account_type = account['account_type']
+    source_type = account['source_type']
     distribution_year = None
     distribution_table = None
 
-    if account_type == 'ira_inherited':
+    if source_type in ('brokerage', 'roth', 'roth_inherited'):
+        return {
+            'distribution_age': 0,
+            'distribution_year': 0,
+            'distribution_table': 'none'
+        }
+
+    elif source_type in ('inc_fers', 'inc_ord', 'inc_ssa'):
+        distribution_age = account['distribution_age']
+        distribution_year = owner_birth_date.year + distribution_age
+        distribution_table = 'none'
+
+    elif source_type in ('ira', 'tsp'):
+        distribution_age, distribution_year = calculate_rmd_age(owner_birth_date)
+        distribution_table = 'uniform_2021_present'
+
+    elif source_type == 'ira_inherited':
         prior_birth_year = datetime.strptime(account['prior_owner_birthdate_iso'], '%Y-%m-%d').year
         prior_death_year = account['prior_owner_death_year']
         beneficiary_birth_year = account['beneficiary_birth_year']
@@ -32,26 +48,11 @@ def rmd_enrichment(account: pd.Series, owner_birth_date: date, owner_age: int, b
             distribution_age = base_year - beneficiary_birth_year
             distribution_table = 'uniform_2021_present'
 
-    elif account_type in ('ira', 'tsp'):
-        distribution_age, distribution_year = calculate_rmd_age(owner_birth_date)
-        distribution_table = 'uniform_2021_present'
-
-    elif account_type == 'brokerage':
-        distribution_age = owner_age
-        distribution_year = base_year
-        distribution_table = 'uniform_2021_present'
-#        distribution_table = account.get('distribution_table', 'uniform_2021_present')
-
-    elif account_type in ('inc_fers', 'inc_ord', 'inc_ssa'):
-        distribution_age = account['distribution_age']
-        distribution_year = owner_birth_date.year + distribution_age
-        distribution_table = 'n/a'
-
     else:
-        print(f"⚠️ Unknown account type: {account_type}")
+        print(f"⚠️ Unknown source type: {source_type}")
         distribution_age = 99
         distribution_year = base_year
-        distribution_table = 'uniform_2021_present'
+        distribution_table = 'none'
 
     return {
         'distribution_age': int(distribution_age),
@@ -65,16 +66,16 @@ def enrich_portfolio_rmd(df: pd.DataFrame, config: SimulationConfig) -> pd.DataF
 
     base_year = int(config.base_year)
     df['owner_birth_date'] = None
-    df['owner_age'] = 0
+    df['age'] = 0
     df['distribution_year'] = 0
-    df['distribution_table'] = 'n/a'
+    df['distribution_table'] = 'none'
 
     for adx, account in df.iterrows():
         try:
             birth_date = datetime.strptime(account['owner_birthdate_iso'], '%Y-%m-%d').date()
             age = calculate_age(birth_date.year, base_year)
             df.at[adx, 'owner_birth_date'] = birth_date
-            df.at[adx, 'owner_age'] = age
+            df.at[adx, 'age'] = age
 
             rmd_info = rmd_enrichment(account, birth_date, age, base_year)
             df.at[adx, 'distribution_age'] = rmd_info['distribution_age']
@@ -113,33 +114,30 @@ def calculate_rmd_age(birthdate):
 
 # ── RMD Calculation ──────────────────────────────
 
-def get_rmd_factor(age: int, account: pd.Series, df_lef: pd.DataFrame, schedule: SimulationSchedule) -> float:
+def get_rmd_amount(
+    *,
+    context,
+    account: dict,
+    age: int
+) -> float:
     """
-    Retrieve the IRS life expectancy factor (RMD divisor) for a given age and account type.
-
-    The account must specify distribution table key that matches a column name in df_lef.
-    If missing, defaults to 'uniform_lifetime'.
-
-    Raises:
-        ValueError: If the factor cannot be found for the given age and table.
+    WD-only RMD calculation using TaxEngine.get_rmd_factor.
     """
-    lookup_age = min(age, schedule.end_age)
-    distribution_table = account.get('distribution_table', 'uniform_lifetime')
+
+    balance = account["current_balance"]
+
+    # Retrieve the IRS divisor from the LEF table
     try:
-        factor = df_lef.loc[df_lef['age'] == lookup_age, distribution_table].iloc[0]
-    except (KeyError, IndexError):
-        raise ValueError(f"Missing RMD factor for age {lookup_age} and table '{distribution_table}'")
-    
-#    print(f"RMD lookup: age={lookup_age}, table={distribution_table}, factor={factor}")
-    return factor
+        factor = context.tax_engine.get_rmd_factor(
+            age=age,
+            account=account,
+            schedule=context.schedule
+        )
+    except Exception:
+        return 0.0
 
-def get_rmd_amount(balance: float, age: int, account: pd.Series, df_lef: pd.DataFrame, schedule) -> float:
-    """
-    Calculate the RMD amount for a given account balance and age.
+    if factor is None or factor <= 0:
+        return 0.0
 
-    Returns:
-        float: Required Minimum Distribution amount.
-    """
-    factor = get_rmd_factor(age, account, df_lef, schedule)
-    return round(balance / factor, 2)
-
+    rmd_amount = balance / factor
+    return min(rmd_amount, balance)

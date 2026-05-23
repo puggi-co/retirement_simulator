@@ -3,13 +3,23 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 from typing import Optional
-from dataclasses import asdict, fields
+from dataclasses import asdict
 
 # Simulation imports
-from src.context.context import SimulationContext
+from context.context import SimulationContext
+
+def flatten_dict(d, parent_key='', sep='.'):
+    """Flatten nested dictionaries for clean Excel export."""
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
 class MonteCarloExporter:
     """
@@ -25,16 +35,16 @@ class MonteCarloExporter:
         """Export all Monte Carlo results to folder"""
         
         # Export Excel summary
-        excel_path = os.path.join(folder_path, f'{self.context.sim_id}_mc_results.xlsx')
+        excel_path = os.path.join(folder_path, f'{self.context.strategy_id}_mc_results.xlsx')
         self.export_excel(excel_path)
         
         # Export charts if requested
         if include_charts:
-            pdf_path = os.path.join(folder_path, f'{self.context.sim_id}_mc_charts.pdf')
+            pdf_path = os.path.join(folder_path, f'{self.context.strategy_id}_mc_charts.pdf')
             self.export_charts(pdf_path)
         
         # Export raw data (optional)
-        csv_path = os.path.join(folder_path, f'{self.context.sim_id}_raw_data.csv')
+        csv_path = os.path.join(folder_path, f'{self.context.strategy_id}_raw_data.csv')
         self.export_raw_data(csv_path)
         
         print(f"📊 Monte Carlo exports completed:")
@@ -42,7 +52,7 @@ class MonteCarloExporter:
         if include_charts:
             print(f"   • Charts: {pdf_path}")
         print(f"   • Raw Data: {csv_path}")
-    
+
     def export_excel(self, excel_path: str) -> None:
         """Export comprehensive Excel workbook with multiple sheets"""
         
@@ -73,7 +83,8 @@ class MonteCarloExporter:
             # Simulation metadata
             if self.results.metadata:
                 metadata_dict = asdict(self.results.metadata)
-                metadata_df = pd.DataFrame(list(metadata_dict.items()), columns=['Parameter', 'Value'])
+                flat = flatten_dict(metadata_dict)
+                metadata_df = pd.DataFrame(list(flat.items()), columns=['Parameter', 'Value'])
                 metadata_df.to_excel(writer, sheet_name='Metadata', index=False)
 
         print(f"📈 Excel summary exported: {excel_path}")
@@ -151,7 +162,7 @@ class MonteCarloExporter:
             # Formatting
             ax.set_xlabel('Year')
             ax.set_ylabel('Portfolio Balance ($)')
-            ax.set_title(f'Monte Carlo Trajectory Analysis\n{self.context.sim_id} - {self.results.metadata.num_simulations:,} Simulations')
+            ax.set_title(f'Monte Carlo Trajectory Analysis\n{self.context.strategy_id} - {self.results.metadata.num_simulations:,} Simulations')
             ax.grid(True, alpha=0.3)
             ax.legend()
             

@@ -2,11 +2,9 @@
 
 import pandas as pd
 from typing import List
-from dataclasses import dataclass
 
-from src.orchestration.orch_entity import MCAnalyzeResults, MCOutcomeLedger
-
-from src.io.export_util import debug_view
+from orchestration.orch_entity import MCAnalyzeResults, MCOutcome
+from loader.export_util import debug_view
 
 class MonteCarloAnalyzer:
     """
@@ -16,18 +14,19 @@ class MonteCarloAnalyzer:
     def __init__(self, failure_thresholds: List[int] = None):
         self.failure_thresholds = failure_thresholds or [0, 100_000, 250_000]
 
-    def analyze(self, outcome_ledger: MCOutcomeLedger) -> MCAnalyzeResults:
+    def analyze(self, outcome: MCOutcome) -> MCAnalyzeResults:
         """
         Comprehensive analysis of Monte Carlo results
         
         Returns:
-            MCOutcomeLedger with all summary statistics
+            MCAnalyzeResults with all summary statistics
         """
         
         print("📊 Analyzing Monte Carlo results...")
         
-        df_results = outcome_ledger.frame.df  # ✅ Extract the actual data
-        debug_view(df_results, 'df_results')
+        df_results = outcome.frame.df  # ✅ Extract the actual data
+        #debugging: view the raw results DataFrame
+        debug_view(df_results, 'md raw df_results')
         
         # Get final year results for each simulation
         df_final = self._get_final_results(df_results)
@@ -176,7 +175,7 @@ class MonteCarloAnalyzer:
     def _calculate_percentiles(self, df_results: pd.DataFrame) -> pd.DataFrame:
         """Calculate percentile bands for trajectory analysis"""
         
-        balance_col = 'base_balance' if 'base_balance' in df_results.columns else 'end_balance'
+        balance_col = 'end_balance' if 'end_balance' in df_results.columns else 'base_balance'
         
         if 'year' in df_results.columns:
             percentiles = df_results.groupby('year')[balance_col].quantile(

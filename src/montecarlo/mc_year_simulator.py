@@ -1,14 +1,14 @@
-# Year Simulator
+# Monte Carlo Year Simulator
 
 import pandas as pd
 import numpy as np
 from typing import Any, List, Dict
 
 from context.context import SimulationContext
-from loader.tax_loader import TaxTable
-from core.schedule import SimulationSchedule
 from core.rmd_util import get_rmd_amount
-from core.spending_util import apply_rate_guardrail
+from core.schedule import SimulationSchedule
+from core.spending_util import SpendingModel
+from loader.tax_loader import TaxTable
 
 #from storage.export_util import debug_view
 
@@ -58,10 +58,6 @@ class YearSimulator:
         # Final balance after withdrawal
         end_balance = end_balance_before_withdrawal - withdrawal_result['amount']
         
-        # Calculate metrics
-        actual_rate = (withdrawal_result['amount'] / start_balance 
-                      if start_balance > 0 else 0.0)
-        
         # Determine next year's withdrawal target
         next_target = self._update_withdrawal_target(
             current_target=withdrawal_target,
@@ -75,31 +71,28 @@ class YearSimulator:
             'age': age,
             'sim_num': sim_num,
             'year_index': year_index,
-            
+
             # Balances
             'start_balance': start_balance,
             'end_balance': end_balance,
-            
+
             # Returns and withdrawals
             'return_rate': return_rate,
+            'mc_return_rate': return_rate,
             'wd_amount': withdrawal_result['amount'],
-#            'wd_type': withdrawal_result['type'],
-            
+
             # Income and targets
             'income_amount': income_amount,
             'withdrawal_target': withdrawal_target,
             'next_withdrawal_target': next_target,
-            
-            # Metrics
-            'actual_rate': actual_rate,
+
+            # Flags
             'is_downturn': is_downturn,
-            
-            # Monte Carlo flags
             'mc_failure_flag': any(end_balance <= threshold for threshold in self.failure_thresholds),
             'goal_met': withdrawal_result['amount'] >= net_withdrawal_target * 0.95,
             'rmd_met': withdrawal_result['type'] == 'ira_rmd'
         }
-    
+
 
     def _calculate_withdrawal(self, age: int, year: int, year_index: int, balance: float,
                             target: float, is_downturn: bool) -> Dict[str, any]:
@@ -111,7 +104,7 @@ class YearSimulator:
         withdrawal_rate = getattr(self.context, "withdrawal_rate", self.config.withdrawal_rate)
 
         # Map unsupported modes to fixed_rate for Monte Carlo
-        if mode in ('taxable_first', 'ira_first', 'roth_first', 'tsp_first'):
+        if mode in ('taxable_first', 'deferred_first', 'roth_first', 'tsp_first'):
             mode = 'fixed_rate'
 
         # Check for RMD requirements first
@@ -132,7 +125,7 @@ class YearSimulator:
             amount = target * inflation_factor
             
         elif mode in ('guardrail', 'guardrail_roth'):
-            amount = apply_rate_guardrail(
+            amount = SpendingModel.apply_rate_guardrail(
                 target=target,
                 balance=balance,
                 config=self.config,
@@ -171,21 +164,33 @@ class YearSimulator:
 
         total_rmd = 0.0
 
-        for _, account in rmd_accounts.iterrows():
+        for _, row in rmd_accounts.iterrows():
 
-            source_type = account['source_type']
-            dist_age    = account['distribution_age']
-            dist_year   = account['distribution_year']
+            source_type = row['source_type']
+            dist_age    = row['distribution_age']
+            dist_year   = row['distribution_year']
 
             # 1. Compute correct RMD age
             if source_type == 'ira_inherited':
                 rmd_age = dist_age + (year - dist_year)
             else:
-                if age < dist_age:
+                if age < effective_distribution_age:
                     continue
                 rmd_age = age
 
-            # 2. Compute RMD using the new API
+            # 2. Build the minimal account object expected by get_rmd_amount
+            account = {
+                "distribution_age": dist_age,
+                "distribution_year": dist_year,
+                "owner_birthdate": row.get("owner_birthdate"),
+                "beneficiary_birth_year": row.get("beneficiary_birth_year"),
+                "is_inherited": source_type == "ira_inherited",
+
+                # MC uses the total portfolio balance for RMD calculations
+                "current_balance": balance,
+            }
+
+            # 3. Compute RMD using the unified RMD engine
             try:
                 rmd = get_rmd_amount(
                     context=self.context,
@@ -197,7 +202,7 @@ class YearSimulator:
             except Exception as e:
                 print(f"⚠️ MC RMD failed for {source_type}: {e}")
 
-        # 3. RMD cannot exceed the account balance
+        # 4. RMD cannot exceed the account balance
         return min(total_rmd, balance)
 
 

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Set, List
 
-from io.excel_loader import ExcelSchemaLoader
+from loader.excel_loader import ExcelSchemaLoader
 
 # ── Tax Filing Status Enum ─────────────────────
 class FilingStatus:

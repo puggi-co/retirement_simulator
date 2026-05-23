@@ -1,6 +1,4 @@
-# ================================================================================
-# RETIREMENT SIMULATION ORCHESTRATOR
-# ================================================================================
+# Monte Carlo Engine and Orchestrator
 
 import pandas as pd
 import numpy as np
@@ -10,20 +8,20 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 # Core imports
-from src.context.context import SimulationContext
-from src.core.strategy_catalog import STRATEGY_CATALOG, StrategyDefinition
-from src.core.schedule import SimulationSchedule
-from src.config.config_schema import SimulationConfig
+from config.config_schema import SimulationConfig
+from context.context import SimulationContext
+from config.catalog import CatalogEntry, CATALOG
+from core.schedule import SimulationSchedule
+from core.tax_engine import TaxEngine
 
 # Input/Output imports 
-from src.io.portfolio_loader import get_portfolio_from_excel
-#from src.io.tax_loader import get_tax_table
+#from storage.tax_loader import get_tax_table
 
 # Orchestrator imports
-from src.orchestration.orch_entity import BatchResults
+from orchestration.orch_entity import BatchResults
 
 # Display settings
-from src.export_util import debug_view
+#from storage.export_util import debug_view
 pd.options.display.float_format = '{:,.2f}'.format
 
 # =================== DATA CLASSES ===================
@@ -87,30 +85,38 @@ class RetirementSimulationOrchestrator:
         """Get list of strategies to run"""
         if selected_strategies:
             # Validate selected strategies
-            invalid = set(selected_strategies) - set(STRATEGY_CATALOG.keys())
+            invalid = set(selected_strategies) - set(CATALOG.keys())
             if invalid:
                 raise ValueError(f"Invalid strategies: {invalid}")
             return selected_strategies
         else:
-            return list(STRATEGY_CATALOG.keys())
+            return list(CATALOG.keys())
     
     def _get_return_rates(self) -> np.ndarray:
-        """Get array of return rates to simulate"""
+        """Get array of return rates to simulate."""
+
+        low = self.config.return_low_rate
+        high = self.config.return_high_rate
+        step = self.config.return_increment_rate
+
+        # Case 1 — single deterministic return rate
+        if step == 0 or low == high:
+            return np.array([low], dtype=float)
+
+        # Case 2 — normal sweep
         return np.arange(
-            self.config.return_low_rate,
-            self.config.return_high_rate + self.config.return_increment_rate,
-            self.config.return_increment_rate
+            low,
+            high + step,
+            step
         )
 
-    def _create_simulation_contexts(self, strategy_config: StrategyDefinition, return_rate: float
-    ) -> tuple[SimulationContext, SimulationContext, SimulationSchedule]:
+    def _create_simulation_contexts(self, catalog_config: CatalogEntry, return_rate: float):
 
-        # ✅ Correct schedule construction
         schedule = SimulationSchedule.from_account_data(self.portfolio_df, self.config)
 
         wd_context = SimulationContext(
             config=self.config,
-            strategy_config=strategy_config,
+            catalog_config=catalog_config,
             return_rate=return_rate,
             sim_type='wd'
         )
@@ -118,10 +124,23 @@ class RetirementSimulationOrchestrator:
         avg_rate = (self.config.return_low_rate + self.config.return_high_rate) / 2
         mc_context = SimulationContext(
             config=self.config,
-            strategy_config=strategy_config,
+            catalog_config=catalog_config,
             return_rate=avg_rate,
             sim_type='mc'
         )
+
+        # Shared runtime state
+        wd_context.schedule = schedule
+        mc_context.schedule = schedule
+
+        wd_context.portfolio = self.portfolio_df
+        mc_context.portfolio = self.portfolio_df
+
+        wd_context.tax_table = self.tax_table
+        mc_context.tax_table = self.tax_table
+
+        wd_context.tax_engine = TaxEngine(self.tax_table, self.config)
+        mc_context.tax_engine = TaxEngine(self.tax_table, self.config)
 
         return wd_context, mc_context, schedule
 
@@ -181,7 +200,6 @@ class RetirementSimulationOrchestrator:
         for run in self.batch_results.runs:
             summary_data.append({
                 'strategy_id': run.strategy_id,
-                'strategy_name': run.strategy_config.sim_name,
                 'return_rate': run.return_rate,
                 'success': run.success,
                 'execution_time_s': run.execution_time,
@@ -240,7 +258,7 @@ class RetirementSimulationOrchestrator:
         # Implementation would analyze risk metrics across all runs
         pass
 
-from src.orchestration.orch_initialize import (
+from orchestration.orch_initialize import (
     initialize, _load_configuration, _load_tax_data,
     _load_portfolio_data, _create_simulation_schedule,
     _validate_initialization
@@ -253,7 +271,7 @@ RetirementSimulationOrchestrator._load_portfolio_data = _load_portfolio_data
 RetirementSimulationOrchestrator._create_simulation_schedule = _create_simulation_schedule
 RetirementSimulationOrchestrator._validate_initialization = _validate_initialization
 
-from src.orchestration.orch_strategy import (
+from orchestration.orch_strategy import (
     run_all_strategies, run_single_strategy, _run_strategy_suite
 )
 
@@ -274,7 +292,7 @@ def main():
 
     # Run all strategies (or specify selected ones)
     batch_results = orchestrator.run_all_strategies(
-         selected_strategies=['fixed_rate', 'fixed_amount', 'guardrail_amount']  # Optional filter
+        selected_strategies=['deferred_first', 'taxable_first', 'fixed_rate_tax_efficient']
     )
 
     # Generate comprehensive analysis

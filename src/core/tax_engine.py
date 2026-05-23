@@ -1,58 +1,135 @@
-"""Performs computations using reference tax tables"""
-
-from typing import Optional, Dict
 import pandas as pd
+from typing import Optional
 
-from src.io.tax_loader import FilingStatus
+from loader.tax_loader import FilingStatus
 
-def get_standard_deduction(year: int, status: str) -> Optional[float]:
-    table = get_standard_deduction_table()
-    if table is None or status not in FilingStatus.ALL:
-        return None
-    row = table.loc[table['year'] == year]
-    return row[f'deduction_{status}'].values[0] if not row.empty else None
+class TaxEngine:
+    """
+    Unified tax computation engine used by all withdrawal engines.
+    Wraps TaxTable and exposes marginal rate + tax calculation.
+    """
 
-def get_tax_bracket(year: int, status: str) -> pd.DataFrame:
-    table = get_tax_bracket_table()
-    if table is None or status not in FilingStatus.ALL:
-        return pd.DataFrame()
-    df = table[table['year'] == year].copy()
-    return df[[f'low_{status}', f'high_{status}', 'rate']]
+    def __init__(self, tax_table, config):
+        self.tax_table = tax_table      # TaxTable object
+        self.config = config
 
-def calculate_tax(brackets, year, filing_status, taxable_income):
-    
-    # Calculate tax owed and effective tax rate on taxable income
-    bracket_rate = effective_tax_rate = tax_owed = 0.0
-    taxable_balance = taxable_income
+    # ----------------------------------------------------------
+    # Standard Deduction
+    # ----------------------------------------------------------
+    def get_standard_deduction(self, year: int, filing_status: str) -> Optional[float]:
+        table = self.tax_table.standard_deduction
+        if table is None:
+            return None
 
-    # loop through income brackets
-    for bracket in brackets[brackets['year'] == year].itertuples():
+        row = table.loc[table["year"] == year]
+        if row.empty:
+            return None
+
+        return row[filing_status].values[0]
+
+    # ----------------------------------------------------------
+    # Tax Brackets (full table for this year)
+    # ----------------------------------------------------------
+    def get_tax_brackets(self, year: int) -> pd.DataFrame:
+        return self.tax_table.tax_bracket[self.tax_table.tax_bracket["year"] == year]
+
+    # ----------------------------------------------------------
+    # Marginal Rate
+    # ----------------------------------------------------------
+    def get_marginal_rate(self, year: int, taxable_income: float, filing_status: str) -> float:
+        if taxable_income <= 0:
+            return 0.0
+
+        brackets = self.get_tax_brackets(year)
+
+        # Column mapping based on filing status
+        if filing_status == FilingStatus.SINGLE:
+            low_col = "low_single"
+            high_col = "high_single"
+        elif filing_status == FilingStatus.MARRIED:
+            low_col = "low_married"
+            high_col = "high_married"
+        elif filing_status == FilingStatus.HEAD:
+            low_col = "low_head"
+            high_col = "high_head"
+        else:
+            return 0.0
+
+        marginal_rate = 0.0
+
+        for row in brackets.itertuples():
+            low = getattr(row, low_col)
+            high = getattr(row, high_col)
+            rate = row.tax_rate
+
+            if low <= taxable_income <= high:
+                return rate
+
+            marginal_rate = rate  # fallback to highest bracket
+
+        return marginal_rate
+
+    # ----------------------------------------------------------
+    # Full Tax Calculation
+    # ----------------------------------------------------------
+    def calculate_tax(self, year: int, filing_status: str, taxable_income: float):
+        if taxable_income <= 0:
+            return 0.0, 0.0
+
+        brackets = self.get_tax_brackets(year)
 
         if filing_status == FilingStatus.SINGLE:
-            # retrieve tax bracket and low/high amounts
-            bracket_rate = bracket[3]
-            bracket_low = bracket[4]
-            bracket_high = bracket[5]
+            low_col = "low_single"
+            high_col = "high_single"
         elif filing_status == FilingStatus.MARRIED:
-            # retrieve tax bracket and low/high amounts
-            bracket_rate = bracket[3]
-            bracket_low = bracket[6]
-            bracket_high = bracket[7]
+            low_col = "low_married"
+            high_col = "high_married"
         elif filing_status == FilingStatus.HEAD:
-            # retrieve tax bracket and low/high amounts
-            bracket_rate = bracket[3]
-            bracket_low = bracket[8]
-            bracket_high = bracket[9]
+            low_col = "low_head"
+            high_col = "high_head"
+        else:
+            return 0.0, 0.0
 
-        if taxable_balance == 0.0:
-            return tax_owed, effective_tax_rate
+        tax_owed = 0.0
+        remaining = taxable_income
 
-        taxable_portion = min(taxable_balance, bracket_high) - bracket_low if taxable_balance >= bracket_low else taxable_balance
-        tax_owed += (taxable_portion * bracket_rate)
-        taxable_balance -= taxable_portion
-        
-        effective_tax_rate = tax_owed / taxable_income if taxable_income > 0 else 0.0
-                    
-    return tax_owed, effective_tax_rate
+        for row in brackets.itertuples():
+            low = getattr(row, low_col)
+            high = getattr(row, high_col)
+            rate = row.tax_rate
 
-# Add more logic as needed (AMT calculations, capital gains, LEF)
+            if remaining <= 0:
+                break
+
+            taxable_portion = min(remaining, high - low)
+            tax_owed += taxable_portion * rate
+            remaining -= taxable_portion
+
+        effective_rate = tax_owed / taxable_income
+        return tax_owed, effective_rate
+
+    # ----------------------------------------------------------
+    # RMD Factor
+    # ----------------------------------------------------------
+    def get_rmd_factor(self, age: int, account: pd.Series, schedule) -> float:
+        """
+        Retrieve the IRS life expectancy factor (RMD divisor) for a given age
+        and account type using the LEF table loaded in TaxTable.
+        """
+
+        df_lef = self.tax_table.lef
+        distribution_table = account.get('distribution_table')
+
+        if distribution_table is None:
+            raise ValueError(f"Account missing distribution_table: {account}")
+
+        lookup_age = min(age, schedule.end_age)
+
+        try:
+            factor = df_lef.loc[df_lef['age'] == lookup_age, distribution_table].iloc[0]
+        except (KeyError, IndexError):
+            raise ValueError(
+                f"Missing RMD factor for age {lookup_age} and table '{distribution_table}'"
+            )
+
+        return factor

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 
+from matplotlib.pylab import seed
 from datetime import datetime as dt
 from dataclasses import dataclass
 from typing import List, Optional, Callable
@@ -12,23 +13,25 @@ TABS: List[str] = ['My_Config']
 REQUIRED_COLUMNS: Dict[str, Dict[str, str]] = {
     'My_Config': {
         'parameter': 'string',
-        'value': 'string'
+        'value': 'string',
+        'default': 'string',
+        'description': 'string'
     }
 }
 
 @dataclass
 class SimulationConfig:
-    # Optional input
     base_year: Optional[int] = None
 
-    # Simulation-Specific Settings
+    # Monte Carlo settings
     mc_historical_cola: float = 0.02
-    mc_return_sampler: Optional[str | Callable[[int], float]] = "fixed"
+    mc_return_sampler: Optional[str | Callable[[int], float]] = "random"
     mc_seed: Optional[int] = 42
     mc_simulations: int = 1000
     mc_years: int = 30
+    mc_volatility: float = 0.12  # NEW: annual volatility
 
-    # Withdrawal and Monte Carlo Shared Settings
+    # Shared settings (unchanged)
     account_closure_amount: float = 10_000
     account_closure_threshold: float = 1.25
     guardrail_rate_high: float = 0.055
@@ -55,7 +58,6 @@ class SimulationConfig:
         if self.base_year is None:
             self.base_year = dt.now().year
 
-        # Normalize mc_seed to int
         if self.mc_seed is not None:
             try:
                 self.mc_seed = int(self.mc_seed)
@@ -65,32 +67,41 @@ class SimulationConfig:
         else:
             self.mc_seed = 42
 
-    # Sampling method
-    def sample_return(self, year: int = 0) -> float:
+    def sample_return(self, year: int = 0, sim_num: int = 0) -> float:
         """
         Return sampling logic based on configured strategy.
         Supports callable, fixed, random, historical, and custom_curve modes.
         """
-        seed = int(self.mc_seed or 42)
+        base_seed = int(self.mc_seed or 42)
 
+        # Callable sampler
         if callable(self.mc_return_sampler):
-            return self.mc_return_sampler(seed + year)
+            return self.mc_return_sampler(base_seed + sim_num + year)
 
-        elif self.mc_return_sampler == "fixed":
-            return self.withdrawal_rate  # or self.return_low_rate if preferred
+        # Fixed (deterministic)
+        if self.mc_return_sampler == "fixed":
+            return self.withdrawal_rate
 
-        elif self.mc_return_sampler == "random":
-            return np.random.default_rng(seed).normal(loc=self.withdrawal_rate, scale=0.02)
+        # Random normal (real Monte Carlo)
+        if self.mc_return_sampler == "random":
+            rng = np.random.default_rng(base_seed + sim_num)
+            return rng.normal(
+                loc=self.withdrawal_rate,
+                scale=self.mc_volatility
+            )
 
-        elif self.mc_return_sampler == "historical":
-            # Placeholder historical returns (e.g., S&P 500)
+        # Historical bootstrap (stochastic)
+        if self.mc_return_sampler == "historical":
             historical_returns = [0.06, 0.08, -0.02, 0.12, 0.04, 0.07]
-            return historical_returns[year % len(historical_returns)]
+            rng = np.random.default_rng(base_seed + sim_num)
+            return rng.choice(historical_returns)
 
-        elif self.mc_return_sampler == "custom_curve":
+        # Custom curve (deterministic)
+        if self.mc_return_sampler == "custom_curve":
             curve = getattr(self, "custom_return_curve", None)
             if isinstance(curve, list) and year < len(curve):
                 return curve[year]
-            return self.withdrawal_rate  # fallback if curve is missing or short
+            return self.withdrawal_rate
 
-        return self.withdrawal_rate  # fallback for unknown sampler
+        # Fallback
+        return self.withdrawal_rate

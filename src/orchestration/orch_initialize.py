@@ -4,16 +4,15 @@ from pathlib import Path
 from datetime import datetime
 
 # Core imports
-from src.core.schedule import SimulationSchedule
-from src.config.config_schema import SimulationConfig
-from src.config.config_loader import get_simulation_config
+from core.schedule import SimulationSchedule
+from config.config_loader import get_simulation_config
 
 # Input/Output imports
-from src.io.portfolio_loader import prepare_portfolio, get_portfolio_from_excel
-from src.io.tax_loader import get_tax_table
+from loader.portfolio_loader import prepare_portfolio, AccountExcel
+from loader.tax_loader import get_tax_table
 
 # Display settings
-from src.export_util import debug_view
+from loader.export_util import debug_view
 pd.options.display.float_format = '{:,.2f}'.format
 
 def initialize(self) -> None:
@@ -54,14 +53,15 @@ def _load_tax_data(self) -> None:
     print("   • Tax tables loaded")
 
 def _load_portfolio_data(self) -> None:
-    """Load and process portfolio data"""
     print("💼 Loading portfolio data...")
-    # 🎯 Pointing directly to your new data/user folder
-    account_path = self.data_folder / "user" / "portfolio.xlsx"
-    portfolio_loader = get_portfolio_from_excel(account_path)
 
-    df_my_account = portfolio_loader.get('account')
-    df_my_income = portfolio_loader.get('income')
+    account_path = self.data_folder / "user" / "portfolio.xlsx"
+
+    portfolio_loader = AccountExcel(account_path)
+    portfolio_loader.load_workbook()
+
+    df_my_account = portfolio_loader.get('account_raw')
+    df_my_income  = portfolio_loader.get('income_raw')
 
     self.portfolio_df = prepare_portfolio(
         self.config, df_my_account, df_my_income

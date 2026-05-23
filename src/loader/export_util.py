@@ -9,9 +9,7 @@ from typing import Optional, Dict, Any, List
 from dataclasses import asdict, is_dataclass
 from pprint import pprint
 
-from src.context.context import SimulationContext
-
-from src.export_util import debug_view
+from context.context import SimulationContext
 
 # ─── Centralized Path Management ─────────────────
 # Find the directory of this file (src/io), goes up 2 levels to project root,
@@ -80,6 +78,8 @@ def debug_view(obj: Any, label: str = '', max_rows: Optional[int] = 100):
         pd.set_option('display.max_columns', None)
         pd.set_option('display.width', None)
         pd.set_option('display.max_colwidth', None)
+        pd.set_option('display.max_rows', None)
+
         # Column summary - Optionally enable for deeper debugging
 #        print("\n--- Column Types ---")
 #        print(obj.dtypes)
@@ -101,12 +101,14 @@ def debug_view(obj: Any, label: str = '', max_rows: Optional[int] = 100):
 
         if max_rows is None or n_rows <= max_rows * 2:
             print("\n--- Full DataFrame ---")
-            print(obj.to_string(line_width=2000))
+            print(obj.to_string(max_rows=n_rows, max_cols=None, line_width=2000))
+            return
         else:
             print(f"\n--- Head (first {max_rows}) ---")
-            print(obj.head(max_rows).to_string(line_width=2000))
+            print(obj.head(max_rows).to_string(max_rows=max_rows, max_cols=None, line_width=2000))
             print(f"\n--- Tail (last {max_rows}) ---")
-            print(obj.tail(max_rows).to_string(line_width=2000))
+            print(obj.tail(max_rows).to_string(max_rows=max_rows, max_cols=None, line_width=2000))
+            return
 
     elif isinstance(obj, dict):
         for key, val in obj.items():
